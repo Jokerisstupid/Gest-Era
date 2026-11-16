@@ -1,0 +1,1 @@
+Private real webcam landmark recordings are intentionally excluded from Git. Place user-session.json and session-v03-0.json through session-v03-2.json here to enable the real-recording regressions. Tests without those files explicitly skip those cases; synthetic tests still run. Do not publish raw webcam landmark data.

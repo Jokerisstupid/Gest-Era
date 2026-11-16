@@ -1,0 +1,69 @@
+/* These overrides only apply while the camera is on. Manual workspace layout stays intact. */
+.gesture-mode [data-gesture],dialog:has(.hand-cursor-host) [data-gesture]{min-width:56px;min-height:56px;touch-action:manipulation}
+.gesture-mode .board-topbar{min-height:78px;height:auto;padding:10px 16px}
+.gesture-mode .board-top-actions{gap:8px}
+.gesture-mode .board-title-group input{max-width:220px}
+.gesture-mode .board-tools{left:12px;gap:4px;padding:7px;max-height:calc(100% - 170px);overflow:auto}
+.gesture-mode .board-tools>button{width:56px;height:56px}
+.gesture-mode .board-tools>button:nth-child(7),.gesture-mode .board-tools>button:nth-child(8){display:flex}
+.gesture-mode .board-undo{top:12px;left:12px}
+.gesture-mode .board-zoom{right:14px;bottom:14px}
+.gesture-mode .board-zoom span{font-size:12px;width:48px}
+.gesture-mode .gesture-hud{bottom:14px;padding:6px 10px;max-width:calc(100% - 430px);left:45%}
+.gesture-mode .gesture-hud>span:nth-child(2){display:block;overflow:hidden;text-overflow:ellipsis;max-width:460px;white-space:normal;line-height:1.7}
+.gesture-mode .gesture-hud>button:last-child{display:flex;border-radius:8px}
+.gesture-mode .gesture-hud button{font-size:11px;justify-content:center}
+.gesture-mode .camera-panel{left:auto;right:14px;bottom:94px;width:242px;max-height:calc(100dvh - 195px);overflow-y:auto}
+.gesture-mode .camera-view{height:132px}
+.gesture-mode .camera-head{padding:4px 9px;min-height:56px}
+.gesture-mode .camera-metrics{font-size:10px}
+.camera-state{font:10px monospace;color:#b2cbee;padding:8px 12px;background:#1c304a}
+.camera-hint{font-size:10px;line-height:1.6;color:#ebc58c;padding:7px 12px;margin:0}
+.gesture-mode .camera-actions{padding:4px 9px;gap:8px}
+.gesture-mode .camera-actions button{justify-content:center;flex:1;font-size:11px;line-height:1.4;border:1px solid #355374;border-radius:7px}
+.recorder-label{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;font-size:10px;color:#9fb7d7}
+.recorder-label select{max-width:136px;background:#152b45;border:1px solid #3b5577;padding:8px 6px;border-radius:6px;font-size:10px;color:#bad2f2}
+.gesture-mode .tool-properties.gesture-properties{left:90px;width:330px;padding:12px;max-height:calc(100% - 24px);overflow:auto}
+.gesture-properties .popover-title{align-items:center;font-size:10px;margin:0 0 5px;gap:8px}
+.gesture-properties .popover-title button{display:grid;place-items:center;border:1px solid #415674;border-radius:7px}
+.gesture-property-label{font-size:10px;color:#9cb6d9;margin:9px 0 6px}
+.gesture-color-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.gesture-mode .gesture-color-grid [data-gesture]{min-width:56px;width:100%;height:56px;border:1px solid transparent;border-radius:6px}
+.gesture-color-grid button>span{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;border:1px solid #95aecb;color:#fff;margin:auto}
+.gesture-color-grid button.active{border-color:#85aff4;background:#294266}
+.gesture-width{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.gesture-width span{font-size:14px;color:#c1d6f4}
+.gesture-width button,.gesture-option-grid button{border:1px solid #395370;background:#192e48;border-radius:7px;display:flex;align-items:center;justify-content:center;gap:5px}
+.gesture-option-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.gesture-option-grid button{font-size:10px;text-transform:capitalize;padding:5px}
+.gesture-option-grid button.active{border-color:#79a6f1;background:#264b7d;color:#dcecff}
+.gesture-mode .dropdown button{font-size:12px;padding:10px 15px}
+.gesture-mode .modal [data-gesture]{padding:12px}
+.hand-cursor-host{position:fixed;inset:0;pointer-events:none;z-index:2147483647}
+.hand-cursor{position:fixed;left:0;top:0;width:0;height:0;pointer-events:none;will-change:transform;z-index:2147483647}
+.hand-cursor>svg{width:56px;height:56px;position:absolute;left:-28px;top:-28px;overflow:visible;filter:drop-shadow(0 1px 2px #07122370);transform-origin:center}
+.hand-cursor circle{fill:none;stroke-width:2.5}
+.hand-cursor .cursor-outline{stroke:#397fff;fill:#5592ff12;transition:r 60ms}
+.hand-cursor .cursor-dot{fill:#2f6bff;stroke:white;stroke-width:1}
+.hand-cursor .cursor-progress{stroke:#34d399;stroke-width:4;transform:rotate(-90deg);transform-origin:center}
+.hand-cursor[data-pinching=true] .cursor-outline{r:11;fill:#2f6bff33}
+.hand-cursor[data-eraser=true] .cursor-outline{r:var(--eraser-r,24px);stroke:#23bfa2;fill:#23bfa218;stroke-dasharray:4 3}
+.hand-cursor[data-laser=true] .cursor-outline{r:5;stroke:#ff4d69;fill:#ff4d69}
+.hand-cursor[data-laser=true] .cursor-dot{fill:#ff4d69;stroke:#fff}
+.hand-cursor[data-laser=true]>svg{filter:drop-shadow(0 0 7px #ff395d)}
+.hand-cursor>span{position:absolute;left:22px;top:25px;white-space:nowrap;font-size:10px;color:#dbeaff;background:#142946e8;border:1px solid #5074a0;border-radius:5px;padding:4px 7px}
+.hand-cursor>span:empty{display:none}
+.gesture-mode .presentation-controls{gap:8px;padding:5px}
+.gesture-mode .presentation-controls button{justify-content:center;padding:7px}
+@media(max-width:1200px){.gesture-mode .board-top-actions .btn span{display:none}.gesture-mode .gesture-hud>span:nth-child(2){font-size:9px;max-width:270px}.gesture-mode .board-tools{display:grid;grid-template-columns:repeat(2,56px);top:87px;transform:none;max-height:calc(100% - 185px)}.gesture-mode .board-tools>i{display:none}.gesture-mode .tool-properties.gesture-properties{left:146px;width:310px}.gesture-mode .gesture-hud{left:12px;transform:none;max-width:calc(100% - 330px)}}
+@media(max-width:760px){.gesture-mode .board-topbar{flex-wrap:wrap}.gesture-mode .board-top-actions{margin-left:auto;gap:4px}.gesture-mode .board-title-group input{width:130px}.gesture-mode .camera-panel{width:205px;bottom:88px;right:8px;max-height:calc(100% - 170px)}.gesture-mode .camera-view{height:100px}.gesture-mode .gesture-hud{max-width:calc(100% - 244px);left:8px;padding:4px}.gesture-mode .gesture-hud>span:nth-child(2){display:none}.gesture-mode .gesture-hud>button:last-child{display:none}.gesture-mode .board-zoom{right:8px;padding:2px;gap:0}.gesture-mode .board-zoom [data-gesture]{min-width:48px}.gesture-mode .board-zoom span{width:33px}.gesture-mode .board-tools{grid-template-columns:56px;top:85px;max-height:calc(100% - 178px)}.gesture-mode .tool-properties.gesture-properties{left:86px;width:calc(100% - 98px)}.gesture-mode .board-tools [data-gesture]{height:56px}.gesture-mode .gesture-hud button{font-size:9px}.gesture-color-grid{grid-template-columns:repeat(3,1fr)}}
+
+.gesture-mode .camera-view.preview-hidden{height:40px;overflow:hidden}
+.camera-quick{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:7px}
+.camera-quick button{font-size:10px;border:1px solid #355274;background:#182c44;border-radius:6px;padding:6px}
+.camera-quick button:last-child{grid-column:1 / -1}
+@media(max-width:760px){.gesture-mode .board-zoom [data-gesture]{min-width:56px}.gesture-mode .gesture-hud{bottom:80px}}
+
+.calibration-card{padding:20px;border:1px solid #3f5877;border-radius:10px;margin:18px 0;background:#192c45}.calibration-card strong{display:block;font-size:17px;margin-bottom:10px}.calibration-card p{font-size:12px;color:#a6bddb;line-height:1.8}.calibration-card progress{width:100%;height:12px;accent-color:#4a88ff;margin:20px 0 10px}.calibration-card span{font-size:11px;color:#90b3df}.camera-pipeline{font-size:9px;padding:8px 12px;color:#85b4cd;background:#152b3a}.free-recording{font-size:10px;display:flex;gap:7px;align-items:center;padding:9px;color:#9ab6d6}.camera-quick button:nth-last-child(-n+3){grid-column:1 / -1}
+
+.gesture-snap-toggle,.camera-label-cycle{width:100%;padding:10px;border:1px solid #3b5e86;border-radius:7px;background:#203b5c;font-size:11px;margin-top:8px}.gesture-mode .camera-label-cycle{width:calc(100% - 18px);margin:7px 9px}.camera-pipeline{line-height:1.7}

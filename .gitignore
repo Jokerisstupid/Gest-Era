@@ -1,6 +1,16 @@
 node_modules/
 dist/
-.env*
+.env
+.env.*
+!.env.example
+.sites-local/
+*.zip
+.npm-cache/
+*.tsbuildinfo
 .openai/
 .vercel/
 tests/fixtures/*.json
+GESTURE_REPLAY_RESULTS.json
+PRACTICAL_REPLAY_RESULTS.json
+public/mediapipe/wasm/
+public/mediapipe/vision_bundle.js

@@ -1,0 +1,13 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+const target=path.resolve('public/mediapipe');
+await fs.mkdir(path.join(target,'wasm'),{recursive:true});
+await fs.cp(path.resolve('node_modules/@mediapipe/tasks-vision/wasm'),path.join(target,'wasm'),{recursive:true});
+await fs.copyFile(path.resolve('node_modules/@mediapipe/tasks-vision/vision_bundle.js'),path.join(target,'vision_bundle.js'));
+const url='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const response=await fetch(url,{signal:AbortSignal.timeout(60000)});
+if(!response.ok)throw Error(`Model download failed: HTTP ${response.status}`);
+const bytes=new Uint8Array(await response.arrayBuffer());
+if(bytes.length<1_000_000)throw Error('The downloaded model is unexpectedly small.');
+await fs.writeFile(path.join(target,'hand_landmarker.task'),bytes);
+console.log(`Hand tracking assets installed (${(bytes.length/1e6).toFixed(1)} MB model).`);

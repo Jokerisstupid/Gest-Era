@@ -1,0 +1,40 @@
+{
+  "name": "gestera",
+  "private": true,
+  "version": "0.3.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "test": "node --import ./scripts/register-ts.mjs --test src/engine/core.test.ts tests/gestures.test.ts tests/practical.test.ts",
+    "preview": "vite preview --host 127.0.0.1",
+    "setup:vision": "node scripts/setup-vision.mjs",
+    "eval:gestures": "node --import ./scripts/register-ts.mjs scripts/eval-gestures.ts",
+    "replay:gestures": "node --import ./scripts/register-ts.mjs scripts/replay-gestures.ts",
+    "replay:practical": "node --import ./scripts/register-ts.mjs scripts/replay-practical.ts"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "1.2.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@vitejs/plugin-react": "6.1.2",
+    "idb": "7.1.1",
+    "jspdf": "4.2.1",
+    "lucide-react": "1.47.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router-dom": "https://registry.npmjs.org/react-router-dom/-/react-router-dom-6.11.2.tgz",
+    "tailwindcss": "4.3.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.5"
+  },
+  "overrides": {
+    "react-router": "https://registry.npmjs.org/react-router/-/react-router-6.11.2.tgz",
+    "@remix-run/router": "https://registry.npmjs.org/@remix-run/router/-/router-1.6.2.tgz"
+  }
+}

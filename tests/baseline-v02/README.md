@@ -1,0 +1,1 @@
+Frozen pure engine sources extracted from the delivered GestEra 0.2 archive before implementing 0.3. Used only by `scripts/replay-practical.ts` to reproduce before/after event traces. Never imported by browser code; do not tune these files.

@@ -4,6 +4,7 @@ import { selectHands } from './identity';
 import { thresholds } from './calibration';
 import { transformStep } from './transform';
 import { commandStep } from './commands';
+import { isolatedTipJump,trackingSample } from './tracking-quality';
 import { initialEngineState, type Context, type EngineEvent, type EngineOutput, type EngineState, type Frame, type GestureSettings, type Sample } from './types';
 
 export function releaseCutoff(samples:Sample[]):number|undefined {
@@ -18,7 +19,7 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
   const events:EngineEvent[]=[];
   const state:EngineState={...previous,ring:[...previous.ring],pending:[...previous.pending],command:{...previous.command,swipe:[...previous.command.swipe]}};
   const end=(reason:string,trim=false)=>{if(state.mode==='ink'||state.mode==='erase')events.push({type:'end',reason,...(trim&&state.mode==='ink'?{trimAfter:releaseCutoff(state.ring)}:{})});state.mode='hover';state.pending=[];};
-  const reset=()=>{state.pinching=false;state.closeFrames=0;state.candidate=undefined;state.ring=[];state.fx=state.fy=undefined;state.features=state.commandFeatures=undefined;state.lastRatio=undefined;state.eraseFrames=0;};
+  const reset=()=>{state.pinching=false;state.closeFrames=0;state.candidate=undefined;state.ring=[];state.fx=state.fy=undefined;state.features=state.commandFeatures=undefined;state.lastRatio=undefined;state.eraseFrames=0;state.eraseSince=undefined;state.tracking=undefined;};
   if(frame.t<=previous.t)return{state:previous,events:[],gesture:'NONE',status:'Waiting for a new camera frame',activeHand:'None',commandReady:false};
   const identityConfig=`${settings.dominantHand}:${settings.swapHands}:${settings.calibration?.enter??.3}:${settings.calibration?.exit??.5}`;
   if(previous.identityConfig!==identityConfig){end('hand preference changed');state.identity=undefined;reset();}
@@ -33,6 +34,8 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
   const features=extractFeatures(hand,discontinuity?undefined:state.features,frame.aspect??1);
   if(!features){end('invalid landmarks',true);reset();state.armed=false;return{state,events,gesture:'NONE',status:'Tracking uncertain — show your whole hand',activeHand:state.identity!.side,commandReady:false};}
   state.features=features;
+  const tracking=trackingSample(hand,frame.t,frame.aspect??1),jump=isolatedTipJump(state.tracking,tracking);state.tracking=tracking;
+  if(jump){end('fingertip tracking jumped',true);reset();state.tracking=tracking;state.armed=false;state.command=initialEngineState().command;return{state,events,gesture:'NONE',status:'Fingertip tracking uncertain — release and show your tips',activeHand:state.identity!.side,commandReady:false};}
   const limits=thresholds(settings.calibration);
   const ratio=features.pinch,anchor=cursorAnchor(hand,ratio,settings.calibration),margin=clamp(settings.region,.03,.32);
   const x=((settings.mirror?1-anchor.x:anchor.x)-margin)/(1-2*margin),y=(anchor.y-margin)/(1-2*margin);
@@ -78,6 +81,7 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
   state.command=command.state;state.commandFeatures=command.features;events.push(...command.events);
 
   state.eraseFrames=gesture==='PEACE'?state.eraseFrames+1:0;
+  state.eraseSince=gesture==='PEACE'&&!blocked?(state.eraseSince??frame.t):undefined;
   if(!blocked&&!context.presentation){
     if(state.mode==='ink'&&!state.pinching){state.ring=priorRing;end('pinch released',true);state.ring=[point];state.candidate=undefined;}
     if(state.mode==='erase'&&gesture!=='PEACE')end('eraser released');
@@ -87,7 +91,7 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
         const points=state.ring.filter(p=>p.t>=(state.candidate??frame.t));
         events.push({type:'begin',point:points[0]??point,points:points.length?points:[point],erase:false});state.mode='ink';
       }else events.push({type:'point',point,erase:false});
-    }else if(gesture==='PEACE'&&state.eraseFrames>=2){
+    }else if(gesture==='PEACE'&&state.armed&&state.eraseFrames>=2&&state.eraseSince!==undefined&&frame.t-state.eraseSince>=100){
       if(state.mode==='ink')end('switch to eraser',true);
       if(state.mode!=='erase'){events.push({type:'begin',point,points:[point],erase:true});state.mode='erase';}
       else events.push({type:'point',point,erase:true});

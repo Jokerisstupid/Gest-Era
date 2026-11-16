@@ -36,6 +36,8 @@ export type TextObject = BaseObject & {
 export type BoardObject = Stroke | ShapeObject | TextObject;
 export type Page = {
     id: string;
+    title?: string;
+    sectionId?: string;
     background: Background;
     objects: BoardObject[];
 };
@@ -43,13 +45,15 @@ export type Project = {
     id: string;
     name: string;
     pages: Page[];
-    schemaVersion: 1;
+    sections?: NotebookSection[];
+    schemaVersion: 1 | 2;
     createdAt: number;
     updatedAt: number;
     favorite: boolean;
     accent: string;
     thumbnail?: string;
 };
+export type NotebookSection = { id: string; name: string; color: string };
 export type Settings = {
     calibration?: import('./engine/gestures/calibration').PinchCalibration;
     guardCommands: boolean;
@@ -81,4 +85,4 @@ export type AIResult = {
     needsConfirmation: boolean;
 };
 export const uid = () => crypto.randomUUID();
-export const newPage = (background: Background = 'dots'): Page => ({ id: uid(), background, objects: [] });
+export const newPage = (background: Background = 'dots', sectionId?:string, title='Untitled page'): Page => ({ id: uid(), title, sectionId, background, objects: [] });

@@ -27,6 +27,10 @@
     {
       "source": "/board/:path*",
       "destination": "/index.html"
+    },
+    {
+      "source": "/notebooks",
+      "destination": "/index.html"
     }
   ]
 }

@@ -7,7 +7,7 @@ export function selectHands(frame:Frame,previous:Identity|undefined,settings:Ges
   if(!hands.length)return{};
   let draw:Hand|undefined;
   const desired=settings.swapHands?(settings.dominantHand==='Right'?'Left':'Right'):settings.dominantHand;
-  if(hands.length===1)draw=hands[0];
+  if(hands.length===1){draw=hands[0];if(previous?.otherWrist&&frame.t-previous.t<300){const wrist=draw.landmarks[0],toDraw=Math.hypot(wrist.x-previous.wrist.x,wrist.y-previous.wrist.y),toOther=Math.hypot(wrist.x-previous.otherWrist.x,wrist.y-previous.otherWrist.y);if(toDraw>.08&&toOther+.025<toDraw)return{ambiguous:true};}}
   else if(previous&&frame.t-previous.t<300){const dt=Math.min(100,frame.t-previous.t),prediction={x:previous.wrist.x+previous.velocity.x*dt,y:previous.wrist.y+previous.velocity.y*dt};
     const ranked=hands.map(h=>({hand:h,d:Math.hypot(h.landmarks[0].x-prediction.x,h.landmarks[0].y-prediction.y)})).sort((a,b)=>a.d-b.d);
     // Ambiguous crossings fail closed rather than swapping drawing and command hands.
@@ -15,6 +15,6 @@ export function selectHands(frame:Frame,previous:Identity|undefined,settings:Ges
     else return{ambiguous:true};
   }else draw=hands.find(h=>physicalSide(h,frame.inputMirrored)===desired)??[...hands].sort((a,b)=>b.score-a.score)[0];
   const wrist=draw.landmarks[0],dt=previous?frame.t-previous.t:0;
-  const identity:Identity={wrist:{...wrist},velocity:previous&&dt>0&&dt<150?{x:(wrist.x-previous.wrist.x)/dt,y:(wrist.y-previous.wrist.y)/dt}:{x:0,y:0},t:frame.t,side:physicalSide(draw,frame.inputMirrored)};
+  const identity:Identity={wrist:{...wrist},velocity:previous&&dt>0&&dt<150?{x:(wrist.x-previous.wrist.x)/dt,y:(wrist.y-previous.wrist.y)/dt}:{x:0,y:0},t:frame.t,side:physicalSide(draw,frame.inputMirrored),otherWrist:hands.find(h=>h!==draw)?.landmarks[0]};
   return{draw,command:hands.find(h=>h!==draw),identity};
 }

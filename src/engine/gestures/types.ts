@@ -2,6 +2,7 @@ import type { Point } from '../../types';
 import type { Landmark, Gesture } from '../gesture';
 import type { PinchCalibration } from './calibration';
 import type { TransformSession } from './transform';
+import type { TrackingSample } from './tracking-quality';
 export type { Landmark, Gesture };
 export interface Hand { landmarks: Landmark[]; worldLandmarks?: Landmark[]; side: string; score: number; }
 export interface Frame { t: number; hands: Hand[]; inputMirrored?: boolean; aspect?: number; }
@@ -11,13 +12,13 @@ export const defaultGestureSettings: GestureSettings = {dominantHand:'Right',swa
 export interface Features { pinch: number; palm: number; extended: boolean[]; thumb: boolean; gesture: Gesture; }
 export interface FilterState { value: number; raw: number; derivative: number; t: number; }
 export interface Sample extends Point { ratio: number; }
-export interface Identity { wrist: Landmark; velocity: Landmark; t: number; side: string; }
+export interface Identity { wrist: Landmark; velocity: Landmark; t: number; side: string;otherWrist?:Landmark; }
 export interface CommandState { ready: number; wrist?: Landmark; lastT: number; fistSince?: number; fired: boolean; cooldown: number; swipe: {x:number;y:number;t:number}[];openSince?:number;armed?:boolean;actionSince?:number;action?:string; }
 export interface EngineState {
   t: number; identity?: Identity; identityConfig?: string; features?: Features; commandFeatures?: Features;
   fx?: FilterState; fy?: FilterState; pinching: boolean; closeFrames: number;
   mode: 'hover'|'ink'|'erase'|'transform'; ring: Sample[]; candidate?: number;
-  pending: Sample[]; lastRatio?: number; eraseFrames: number; armed: boolean;
+  pending: Sample[]; lastRatio?: number; eraseFrames: number; eraseSince?:number;armed: boolean;tracking?:TrackingSample;
   command: CommandState; transform?: TransformSession; transformReady: number;
 }
 export interface Cursor {x:number;y:number;t:number;ratio:number;hand:string;gesture:Gesture;eraser:boolean;}

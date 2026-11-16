@@ -1,8 +1,8 @@
-export interface PinchCalibration { enter:number;exit:number;lead:number;openMedian:number;closedMedian:number;noise:number;samples:number;createdAt:number; }
+export interface PinchCalibration { enter:number;exit:number;lead:number;openMedian:number;closedMedian:number;noise:number;samples:number;createdAt:number;version?:2;verifiedCycles?:number;cameraId?:string;aspect?:number; }
 const quantile=(v:number[],q:number)=>{const s=[...v].sort((a,b)=>a-b);return s[Math.floor((s.length-1)*q)];};
 export function validCalibration(v:unknown):v is PinchCalibration{
   if(!v||typeof v!=='object')return false;const x=v as PinchCalibration;
-  return [x.enter,x.exit,x.lead,x.openMedian,x.closedMedian,x.noise,x.samples,x.createdAt].every(Number.isFinite)&&x.enter>=.08&&x.closedMedian<x.enter&&x.exit>x.enter+.07&&x.exit<x.openMedian&&x.exit<=1.1&&x.lead>x.exit&&x.lead<=1.4&&x.samples>=48;
+  return [x.enter,x.exit,x.lead,x.openMedian,x.closedMedian,x.noise,x.samples,x.createdAt].every(Number.isFinite)&&x.enter>=.08&&x.closedMedian>=0&&x.noise>=0&&x.closedMedian<x.enter&&x.exit>x.enter+.07&&x.exit<x.openMedian&&x.exit<=1.1&&x.lead>x.exit&&x.lead<=1.4&&x.samples>=48&&(x.cameraId===undefined||typeof x.cameraId==='string')&&(x.aspect===undefined||(Number.isFinite(x.aspect)&&x.aspect>0))&&(x.version===undefined||(x.version===2&&x.verifiedCycles===3));
 }
 export function calibrate(open:number[],closed:number[],createdAt=Date.now()):{profile?:PinchCalibration;error?:string}{
   const clean=(a:number[])=>a.filter(x=>Number.isFinite(x)&&x>0&&x<4);
@@ -16,3 +16,4 @@ export function calibrate(open:number[],closed:number[],createdAt=Date.now()):{p
   return{profile:{enter,exit,lead,openMedian:om,closedMedian:cm,noise,samples:open.length+closed.length,createdAt}};
 }
 export function thresholds(profile?:PinchCalibration){return validCalibration(profile)?{enter:profile.enter,exit:profile.exit,lead:profile.lead}:{enter:.30,exit:.50,lead:.60};}
+export function profileMatches(profile:PinchCalibration|undefined,cameraId:string,aspect:number){return !profile||(validCalibration(profile)&&(!profile.cameraId||profile.cameraId===cameraId)&&(!profile.aspect||Math.abs(profile.aspect-aspect)<.08));}

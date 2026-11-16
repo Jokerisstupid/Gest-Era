@@ -2,7 +2,7 @@ import type { Hand } from './gestures/types';
 import { createVisionBackend,type VisionBackend } from './vision-backend';
 import { FrameGate } from './frameGate';
 export type TrackedHand=Hand;
-export interface CaptureMetrics {t:number;fps:number;captureFPS:number;inference:number;pipeline:number;backend:string;lowLight:boolean;aspect:number;inputMirrored:false;}
+export interface CaptureMetrics {t:number;fps:number;captureFPS:number;inference:number;pipeline:number;backend:string;lowLight:boolean;aspect:number;inputMirrored:false;cameraId:string;}
 export class CameraTracker {
   private stream?:MediaStream;private backend?:VisionBackend;private gate=new FrameGate();private handle=0;private cancelled=true;private usesVideoCallback=false;
   constructor(private video:HTMLVideoElement,private onFrame:(hands:Hand[],metrics:CaptureMetrics)=>void,private onError:(message:string)=>void){}
@@ -23,7 +23,7 @@ export class CameraTracker {
         if(this.cancelled||this.video.readyState<2||mediaTime<=previous)return;previous=mediaTime;const t=mediaTime*1000,captureFPS=rate(captured,t);if(this.gate.busy)return;
         if(t-lastLight>2000&&ctx){ctx.drawImage(this.video,0,0,16,12);const rgba=ctx.getImageData(0,0,16,12).data;let sum=0;for(let i=0;i<rgba.length;i+=4)sum+=rgba[i]*.2126+rgba[i+1]*.7152+rgba[i+2]*.0722;lowLight=sum/(rgba.length/4)<45;lastLight=t;}
         const start=performance.now(),aspect=this.video.videoHeight/this.video.videoWidth;
-        void this.gate.run(()=>this.backend!.infer(this.video,t),result=>this.onFrame(result.hands,{t,fps:rate(processed,t),captureFPS,inference:result.inference,pipeline:performance.now()-start,backend:this.backend!.mode,lowLight,aspect,inputMirrored:false}),error=>{this.stop();this.onError(error instanceof Error?error.message:'Tracking stopped. Restart your camera.');});
+        void this.gate.run(()=>this.backend!.infer(this.video,t),result=>this.onFrame(result.hands,{t,fps:rate(processed,t),captureFPS,inference:result.inference,pipeline:performance.now()-start,backend:this.backend!.mode,lowLight,aspect,inputMirrored:false,cameraId:this.stream?.getVideoTracks()[0]?.getSettings().deviceId??'default'}),error=>{this.stop();this.onError(error instanceof Error?error.message:'Tracking stopped. Restart your camera.');});
       };
       this.usesVideoCallback=typeof this.video.requestVideoFrameCallback==='function';
       const schedule=()=>{if(this.cancelled)return;if(this.usesVideoCallback)this.handle=this.video.requestVideoFrameCallback((_,metadata)=>run(metadata.mediaTime));else this.handle=requestAnimationFrame(()=>run(this.video.currentTime));};

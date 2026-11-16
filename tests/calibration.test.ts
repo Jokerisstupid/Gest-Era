@@ -2,6 +2,7 @@ import { describe,it } from 'node:test';
 import assert from 'node:assert/strict';
 import { captureStep,initialCapture,initialVerification,verificationStep,type CalibrationObservation } from '../src/engine/gestures/calibration-session';
 import { calibrate,profileMatches,validCalibration } from '../src/engine/gestures/calibration';
+import { acquireCamera } from '../src/engine/camera-request';
 const observation=(t:number,ratio=1.1,hands=1):CalibrationObservation=>({t,ratio,hands,wrist:{x:.5,y:.7},cameraId:'synthetic-camera',aspect:.75});
 describe('calibration collection and verification - synthetic observations',()=>{
   it('completes only after actual stable valid samples and a settling interval',()=>{let s=initialCapture();for(let t=0;t<=2800;t+=50)s=captureStep(s,observation(t),'open');assert.equal(s.done,true);assert.ok(s.samples.length>=40);assert.ok(s.elapsed>=2300);});
@@ -13,4 +14,9 @@ describe('calibration collection and verification - synthetic observations',()=>
   it('requires an initial release and three confirmed pinch and release cycles',()=>{let s=initialVerification(),t=0;for(let i=0;i<6;i++){s=verificationStep(s,observation(t+=50,.1),profile);assert.equal(s.cycles,0);}for(let i=0;i<3;i++){for(const r of [1.1,1.1,.1,.1,1.1,1.1])s=verificationStep(s,observation(t+=50,r),profile);assert.equal(s.cycles,i+1);}});
   it('does not count a hand loss as a successful release',()=>{let s=initialVerification();for(const [i,r]of [1.1,1.1,.1,.1].entries())s=verificationStep(s,observation(i*50,r),profile);assert.equal(s.closed,true);s=verificationStep(s,{t:200,hands:0},profile);s=verificationStep(s,observation(250),profile);assert.equal(s.cycles,0);assert.equal(s.closed,false);});
   it('binds verified profiles to camera and aspect while retaining legacy compatibility',()=>{const p={...profile,version:2 as const,verifiedCycles:3,cameraId:'one',aspect:.75};assert.ok(validCalibration(p));assert.equal(profileMatches(p,'one',.75),true);assert.equal(profileMatches(p,'two',.75),false);assert.equal(profileMatches(p,'one',.56),false);assert.equal(profileMatches(profile,'any',.56),true);assert.equal(validCalibration({...p,verifiedCycles:1}),false);});
+});
+describe('camera permission cleanup - synthetic stream promises',()=>{
+  it('returns a granted stream without stopping its active tracks',async()=>{let stops=0;const stream={getTracks:()=>[{stop:()=>stops++}]};assert.equal(await acquireCamera(Promise.resolve(stream),new AbortController().signal),stream);assert.equal(stops,0);});
+  it('stops a camera granted after setup was cancelled',async()=>{let grant!:(s:{getTracks:()=>{stop:()=>void}[]})=>void,stops=0;const controller=new AbortController(),pending=acquireCamera(new Promise(r=>grant=r),controller.signal);controller.abort();await assert.rejects(pending,/cancelled/);grant({getTracks:()=>[{stop:()=>stops++}]});await Promise.resolve();assert.equal(stops,1);});
+  it('times out a pending permission and stops a stream granted after timeout',async()=>{let grant!:(s:{getTracks:()=>{stop:()=>void}[]})=>void,stops=0;const pending=acquireCamera(new Promise(r=>grant=r),new AbortController().signal,5);await assert.rejects(pending,/permission is still pending/);grant({getTracks:()=>[{stop:()=>stops++}]});await Promise.resolve();assert.equal(stops,1);});
 });

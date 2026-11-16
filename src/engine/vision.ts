@@ -1,16 +1,18 @@
 import type { Hand } from './gestures/types';
 import { createVisionBackend,type VisionBackend } from './vision-backend';
 import { FrameGate } from './frameGate';
+import { acquireCamera } from './camera-request';
 export type TrackedHand=Hand;
 export interface CaptureMetrics {t:number;fps:number;captureFPS:number;inference:number;pipeline:number;backend:string;lowLight:boolean;aspect:number;inputMirrored:false;cameraId:string;}
 export class CameraTracker {
-  private stream?:MediaStream;private backend?:VisionBackend;private gate=new FrameGate();private handle=0;private cancelled=true;private usesVideoCallback=false;
+  private stream?:MediaStream;private backend?:VisionBackend;private gate=new FrameGate();private handle=0;private cancelled=true;private usesVideoCallback=false;private permission?:AbortController;
   constructor(private video:HTMLVideoElement,private onFrame:(hands:Hand[],metrics:CaptureMetrics)=>void,private onError:(message:string)=>void){}
   async start(deviceId?:string){
     this.cancelled=false;
     try{
       if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS or localhost. Mouse and touch still work.');
-      const stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30},...(deviceId?{deviceId:{exact:deviceId}}:{facingMode:'user'})},audio:false});
+      this.permission=new AbortController();
+      const stream=await acquireCamera(navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30},...(deviceId?{deviceId:{exact:deviceId}}:{facingMode:'user'})},audio:false}),this.permission.signal);
       if(this.cancelled){stream.getTracks().forEach(t=>t.stop());return;}this.stream=stream;this.video.srcObject=stream;
       stream.getVideoTracks().forEach(track=>track.onended=()=>{if(!this.cancelled){this.stop();this.onError('Your camera disconnected. Reconnect it and restart tracking.');}});
       await this.video.play();
@@ -28,7 +30,7 @@ export class CameraTracker {
       this.usesVideoCallback=typeof this.video.requestVideoFrameCallback==='function';
       const schedule=()=>{if(this.cancelled)return;if(this.usesVideoCallback)this.handle=this.video.requestVideoFrameCallback((_,metadata)=>run(metadata.mediaTime));else this.handle=requestAnimationFrame(()=>run(this.video.currentTime));};
       const run=(time:number)=>{if(this.cancelled)return;try{process(time);schedule();}catch(error){this.stop();this.onError(error instanceof Error?error.message:'Tracking stopped. Restart your camera.');}};schedule();
-    }catch(error){this.stop();const name=error instanceof DOMException?error.name:'';this.onError(name==='NotAllowedError'?'Camera permission was declined. Enable it in your browser or use mouse/touch.':name==='NotFoundError'?'No camera found. Connect one or use mouse/touch.':name==='NotReadableError'?'Your camera is busy. Close other camera apps.':error instanceof Error?error.message:'Camera setup failed.');}
+    }catch(error){if(this.cancelled)return;this.stop();const name=error instanceof DOMException?error.name:'';this.onError(name==='NotAllowedError'?'Camera permission was declined. Enable it in your browser or use mouse/touch.':name==='NotFoundError'?'No camera found. Connect one or use mouse/touch.':name==='NotReadableError'?'Your camera is busy. Close other camera apps.':error instanceof Error?error.message:'Camera setup failed.');}
   }
-  stop(){this.cancelled=true;this.gate.stop();if(this.usesVideoCallback)this.video.cancelVideoFrameCallback?.(this.handle);else cancelAnimationFrame(this.handle);this.stream?.getTracks().forEach(t=>{t.onended=null;t.stop();});this.stream=undefined;this.video.srcObject=null;this.backend?.close();this.backend=undefined;}
+  stop(){this.cancelled=true;this.permission?.abort();this.permission=undefined;this.gate.stop();if(this.usesVideoCallback)this.video.cancelVideoFrameCallback?.(this.handle);else cancelAnimationFrame(this.handle);this.stream?.getTracks().forEach(t=>{t.onended=null;t.stop();});this.stream=undefined;this.video.srcObject=null;this.backend?.close();this.backend=undefined;}
 }

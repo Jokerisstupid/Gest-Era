@@ -6,3 +6,8 @@
 @media(prefers-reduced-motion:reduce){.pinch-meter>span,.notebook-card{transition:none}}
 
 .empty-section-canvas{position:absolute;inset:0;z-index:6;background:#1b283e;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:15px;text-align:center;padding:24px;color:#a9bcdd}.empty-section-canvas h2{font-size:24px;font-weight:500;color:#e0e9fb}.empty-section-canvas p{font-size:14px;line-height:1.7}.empty-section-canvas>.btn{margin-top:6px}
+
+.canvas-content{position:absolute;inset:0}.gesture-mode .page-actions summary{min-height:56px;display:flex;align-items:center;cursor:pointer}
+@media(max-width:600px){.gesture-mode .board-top-actions [data-gesture],.gesture-mode .camera-head button,.gesture-mode .camera-settings-toggle{min-width:56px;min-height:56px}.gesture-mode .camera-primary-actions button{min-height:56px}.gesture-mode .board-zoom{top:76px}.gesture-mode .board-zoom [data-gesture]{min-width:56px;min-height:56px}}
+
+.notebook-template-choice{display:grid;gap:8px;margin-top:18px}.notebook-template-choice small{font-size:11px;color:#93a9c8}.notebook-template-choice select{min-height:42px}

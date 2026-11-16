@@ -11,7 +11,7 @@ export function Modal({ title, children, onClose, wide = false }: {
     children: ReactNode;
     onClose: () => void;
     wide?: boolean;
-}) { const ref = useRef<HTMLDialogElement>(null); useEffect(() => { const d = ref.current; d?.showModal(); return () => d?.close(); }, []); return <dialog ref={ref} className={`modal ${wide ? 'wide' : ''}`} onCancel={onClose} onClick={e => { if (e.target === e.currentTarget)
+}) { const ref = useRef<HTMLDialogElement>(null); useEffect(() => { const d = ref.current; d?.showModal(); d?.querySelector<HTMLInputElement>('input:not([type="hidden"]),textarea')?.focus(); return () => d?.close(); }, []); return <dialog ref={ref} className={`modal ${wide ? 'wide' : ''}`} onCancel={onClose} onClick={e => { if (e.target === e.currentTarget)
     onClose(); }} onKeyDown={e => { if (e.key === 'Escape') {
     e.stopPropagation();
     onClose();

@@ -1,3 +1,5 @@
+> Historical 0.3 notes. For the current notebook and verified calibration flow, use README.md and UPDATE_INSTRUCTIONS.md.
+
 # Practical gesture upgrade - 0.3
 
 ## Personal setup

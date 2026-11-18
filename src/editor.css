@@ -95,3 +95,21 @@
   .board-app :focus-visible { outline-color:Highlight; }
   .board-app button[aria-pressed=true] { border:2px solid Highlight; }
 }
+
+/* Keep the inline camera on-screen in the folded control. */
+.gesture-mode .camera-view { display:grid; place-items:center; overflow:hidden; }
+.gesture-mode .camera-feed {
+  position:relative; width:auto; height:100%; max-width:100%; overflow:hidden;
+}
+.camera-panel.is-folded > .camera-view {
+  display:grid; position:absolute; top:50%; left:7px; transform:translateY(-50%);
+  width:48px; height:34px; border-radius:4px;
+}
+.camera-panel.is-folded .camera-head { padding-left:62px; }
+.camera-panel.is-folded .camera-view .camera-message { display:none; }
+.camera-panel.is-folded .camera-head button { min-width:44px; }
+.camera-panel.is-folded .camera-head > span { line-height:1.3; }
+.camera-panel .camera-view.has-error .camera-message { overflow:auto; }
+@media (max-width:650px) {
+  .gesture-mode .camera-panel.is-folded { width:min(245px,calc(100vw - 16px)); }
+}

@@ -16,9 +16,24 @@ async function workerBackend(model:string):Promise<VisionBackend>{
     worker.postMessage({type:'init',wasm:new URL('/mediapipe/wasm',location.origin).href,model:new URL(model,location.origin).href});
   });}catch(error){clearTimeout(timer);worker.terminate();throw error;}
 }
-export async function createVisionBackend(model:string):Promise<VisionBackend>{
-  if(typeof Worker!=='undefined'&&typeof OffscreenCanvas!=='undefined'&&typeof createImageBitmap==='function')try{return await workerBackend(model);}catch{/* Compatible main-thread fallback remains available. */}
-  const {FilesetResolver,HandLandmarker}=await import('@mediapipe/tasks-vision'),vision=await FilesetResolver.forVisionTasks('/mediapipe/wasm'),options={runningMode:'VIDEO' as const,numHands:2,minHandDetectionConfidence:.55,minHandPresenceConfidence:.55,minTrackingConfidence:.55};let tracker:HandLandmarker,delegate='GPU';
-  try{tracker=await HandLandmarker.createFromOptions(vision,{...options,baseOptions:{modelAssetPath:model,delegate:'GPU'}});}catch{delegate='CPU';tracker=await HandLandmarker.createFromOptions(vision,{...options,baseOptions:{modelAssetPath:model,delegate:'CPU'}});}
-  return{mode:`Compatible ${delegate}`,async infer(video,t){const start=performance.now(),r=tracker.detectForVideo(video,t);return{inference:performance.now()-start,hands:r.landmarks.map((landmarks,i)=>({landmarks,worldLandmarks:r.worldLandmarks?.[i],side:r.handedness[i]?.[0]?.categoryName??'Unknown',score:r.handedness[i]?.[0]?.score??0}))};},close(){tracker.close();}};
+export async function createVisionBackend(model:string, preferCompatible=false):Promise<VisionBackend>{
+  if(!preferCompatible && typeof Worker!=='undefined'&&typeof OffscreenCanvas!=='undefined'&&typeof createImageBitmap==='function')try{return await workerBackend(model);}catch{/* Compatible main-thread fallback remains available. */}
+  const {FilesetResolver,HandLandmarker}=await import('@mediapipe/tasks-vision'),vision=await FilesetResolver.forVisionTasks('/mediapipe/wasm'),options={runningMode:'VIDEO' as const,numHands:2,minHandDetectionConfidence:.55,minHandPresenceConfidence:.55,minTrackingConfidence:.55,};let tracker:HandLandmarker|undefined,delegate='GPU';
+  if(!preferCompatible){
+    try {tracker=await HandLandmarker.createFromOptions(vision,{...options,canvas:document.createElement('canvas'),baseOptions:{modelAssetPath:model,delegate:'GPU'}});}
+    catch {delegate='CPU';}
+  } else delegate='CPU';
+  if(!tracker) tracker=await HandLandmarker.createFromOptions(vision,{...options,canvas:document.createElement('canvas'),baseOptions:{modelAssetPath:model,delegate:'CPU'}});
+  const landmarker=tracker;
+  const input=preferCompatible?document.createElement('canvas'):undefined;
+  const context=input?.getContext('2d');
+  if(input && !context) {landmarker.close();throw Error('Could not prepare camera frames. Restart the camera.');}
+  return{mode:`Compatible ${delegate}`,async infer(video,t){const start=performance.now();
+    if(input && context){
+      const scale=Math.min(1,480/Math.max(video.videoWidth,video.videoHeight));
+      const width=Math.max(1,Math.round(video.videoWidth*scale)),height=Math.max(1,Math.round(video.videoHeight*scale));
+      if(input.width!==width || input.height!==height){input.width=width;input.height=height;}
+      context.drawImage(video,0,0,width,height);
+    }
+    const r=landmarker.detectForVideo(input??video,t);return{inference:performance.now()-start,hands:r.landmarks.map((landmarks,i)=>({landmarks,worldLandmarks:r.worldLandmarks?.[i],side:r.handedness[i]?.[0]?.categoryName??'Unknown',score:r.handedness[i]?.[0]?.score??0}))};},close(){landmarker.close();}};
 }

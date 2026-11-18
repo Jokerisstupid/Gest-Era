@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { captureStep,initialCapture,initialVerification,verificationStep,type CalibrationObservation } from '../src/engine/gestures/calibration-session';
 import { calibrate,profileMatches,validCalibration } from '../src/engine/gestures/calibration';
 import { acquireCamera } from '../src/engine/camera-request';
+import { watchCameraFrames } from '../src/engine/camera-frames';
 const observation=(t:number,ratio=1.1,hands=1):CalibrationObservation=>({t,ratio,hands,wrist:{x:.5,y:.7},cameraId:'synthetic-camera',aspect:.75});
 describe('calibration collection and verification - synthetic observations',()=>{
   it('completes only after actual stable valid samples and a settling interval',()=>{let s=initialCapture();for(let t=0;t<=2800;t+=50)s=captureStep(s,observation(t),'open');assert.equal(s.done,true);assert.ok(s.samples.length>=40);assert.ok(s.elapsed>=2300);});
@@ -19,4 +20,39 @@ describe('camera permission cleanup - synthetic stream promises',()=>{
   it('returns a granted stream without stopping its active tracks',async()=>{let stops=0;const stream={getTracks:()=>[{stop:()=>stops++}]};assert.equal(await acquireCamera(Promise.resolve(stream),new AbortController().signal),stream);assert.equal(stops,0);});
   it('stops a camera granted after setup was cancelled',async()=>{let grant!:(s:{getTracks:()=>{stop:()=>void}[]})=>void,stops=0;const controller=new AbortController(),pending=acquireCamera(new Promise(r=>grant=r),controller.signal);controller.abort();await assert.rejects(pending,/cancelled/);grant({getTracks:()=>[{stop:()=>stops++}]});await Promise.resolve();assert.equal(stops,1);});
   it('times out a pending permission and stops a stream granted after timeout',async()=>{let grant!:(s:{getTracks:()=>{stop:()=>void}[]})=>void,stops=0;const pending=acquireCamera(new Promise(r=>grant=r),new AbortController().signal,5);await assert.rejects(pending,/permission is still pending/);grant({getTracks:()=>[{stop:()=>stops++}]});await Promise.resolve();assert.equal(stops,1);});
+});
+
+it('processes advancing video time when native frame callbacks stall, then cancels both schedules',({mock})=>{
+  let clock=0,mediaTime=0;
+  let animation:FrameRequestCallback|undefined, native:VideoFrameRequestCallback|undefined;
+  let cancelledAnimation=false,cancelledVideo=false;
+  mock.method(performance,'now',()=>clock);
+  const originalAnimation=globalThis.requestAnimationFrame;
+  const originalCancel=globalThis.cancelAnimationFrame;
+  globalThis.requestAnimationFrame=callback=>{animation=callback;return 41;};
+  globalThis.cancelAnimationFrame=id=>{assert.equal(id,41);cancelledAnimation=true;};
+  const video={
+    paused:false,readyState:2,videoWidth:640,videoHeight:480,
+    get currentTime(){return mediaTime;},
+    requestVideoFrameCallback(callback:VideoFrameRequestCallback){native=callback;return 17;},
+    cancelVideoFrameCallback(id:number){assert.equal(id,17);cancelledVideo=true;},
+  } as HTMLVideoElement;
+  try {
+    const frames:number[]=[];
+    const stop=watchCameraFrames(video,time=>frames.push(time));
+    native!(0,{mediaTime:0} as VideoFrameCallbackMetadata);
+    clock=400;mediaTime=.4;animation!(clock);
+    assert.deepEqual(frames,[0]);
+    clock=500;mediaTime=.5;animation!(clock);
+    clock=520;animation!(clock);
+    native!(clock,{mediaTime:.5} as VideoFrameCallbackMetadata);
+    clock=550;native!(clock,{mediaTime:.55} as VideoFrameCallbackMetadata);
+    stop();
+    assert.deepEqual(frames,[0,500,550]);
+    assert.equal(cancelledAnimation,true);
+    assert.equal(cancelledVideo,true);
+  } finally {
+    globalThis.requestAnimationFrame=originalAnimation;
+    globalThis.cancelAnimationFrame=originalCancel;
+  }
 });

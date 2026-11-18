@@ -19,27 +19,43 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
   const events:EngineEvent[]=[];
   const state:EngineState={...previous,ring:[...previous.ring],pending:[...previous.pending],command:{...previous.command,swipe:[...previous.command.swipe]}};
   const end=(reason:string,trim=false)=>{if(state.mode==='ink'||state.mode==='erase')events.push({type:'end',reason,...(trim&&state.mode==='ink'?{trimAfter:releaseCutoff(state.ring)}:{})});state.mode='hover';state.pending=[];};
-  const reset=()=>{state.pinching=false;state.closeFrames=0;state.closeSince=undefined;state.candidate=undefined;state.ring=[];state.fx=state.fy=undefined;state.features=state.commandFeatures=undefined;state.lastRatio=undefined;state.eraseFrames=0;state.eraseSince=undefined;state.tracking=undefined;state.transform=undefined;state.transformReady=0;state.command=initialEngineState().command;};
+  const reset=()=>{state.pinching=false;state.closeFrames=0;state.closeSince=undefined;state.releaseFrames=0;state.heldThroughLoss=false;state.candidate=undefined;state.ring=[];state.fx=state.fy=undefined;state.features=state.commandFeatures=undefined;state.lastRatio=undefined;state.eraseFrames=0;state.eraseSince=undefined;state.tracking=undefined;state.transform=undefined;state.transformReady=0;state.command=initialEngineState().command;};
   if(frame.t<=previous.t)return{state:previous,events:[],gesture:'NONE',status:'Waiting for a new camera frame',activeHand:'None',commandReady:false};
   const width=Math.max(1,frame.viewport?.width??1440),height=Math.max(1,frame.viewport?.height??900);
   const identityConfig=`${settings.dominantHand}:${settings.swapHands}:${width}x${height}:${settings.mirror}:${settings.region}:${settings.calibration?.enter??.3}:${settings.calibration?.exit??.5}`;
   if(previous.identityConfig!==identityConfig){end('hand preference changed');state.identity=undefined;reset();if(previous.identityConfig)state.armed=false;}
   state.identityConfig=identityConfig;
-  const discontinuity=frame.t-previous.t>150;
+  const maxGap=frame.mobile?320:150;
+  const discontinuity=frame.t-previous.t>maxGap;
   if(discontinuity){end('camera frame gap',true);reset();state.identity=frame.t-previous.t>300?undefined:state.identity;state.armed=previous.armed&&!previous.pinching;}
   state.t=frame.t;
   const selection=selectHands(frame,state.identity,settings),hand=selection.draw;
+  if(!hand && frame.mobile && !selection.ambiguous && state.mode==='ink' && state.identity && frame.t-state.identity.t<=230) {
+    state.heldThroughLoss=true;
+    return {state,events,gesture:'NONE',status:'Hand briefly out of view',activeHand:'None',commandReady:false};
+  }
   if(!hand){end('hand lost',true);reset();state.armed=previous.armed&&!previous.pinching;state.command={...initialEngineState().command,cooldown:state.command.cooldown};return{state,events,gesture:'NONE',status:selection.ambiguous?'Hands overlap — separate them':'Hand lost — bring it into view',activeHand:'None',commandReady:false};}
   if(state.identity&&frame.t-state.identity.t<150&&Math.hypot(hand.landmarks[0].x-state.identity.wrist.x,hand.landmarks[0].y-state.identity.wrist.y)>.22){end('tracking position jumped',true);reset();state.armed=false;}
+  const previousIdentity=state.identity;
   state.identity=selection.identity;
   const features=extractFeatures(hand,discontinuity?undefined:state.features,frame.aspect??1);
   if(!features){end('invalid landmarks',true);reset();state.armed=false;return{state,events,gesture:'NONE',status:'Tracking uncertain — show your whole hand',activeHand:state.identity!.side,commandReady:false};}
   state.features=features;
   const tracking=trackingSample(hand,frame.t,frame.aspect??1),jump=isolatedTipJump(state.tracking,tracking);state.tracking=tracking;
   if(jump){end('fingertip tracking jumped',true);reset();state.tracking=tracking;state.armed=false;state.command=initialEngineState().command;return{state,events,gesture:'NONE',status:'Fingertip tracking uncertain — release and show your tips',activeHand:state.identity!.side,commandReady:false};}
-  const limits=thresholds(settings.calibration);
-  const ratio=features.pinch,anchor=cursorAnchor(hand,ratio,settings.calibration),margin=clamp(settings.region,.03,.32);
+  const limits=thresholds(settings.calibration,frame.mobile);
+  const ratio=features.pinch,anchor=cursorAnchor(hand,ratio,settings.calibration,frame.mobile),margin=clamp(settings.region,.03,.32);
   const x=((settings.mirror?1-anchor.x:anchor.x)-margin)/(1-2*margin),y=(anchor.y-margin)/(1-2*margin);
+  if(state.heldThroughLoss && previousIdentity) {
+    const wrist=hand.landmarks[0], tip=hand.landmarks[8];
+    const moved=Math.hypot(wrist.x-previousIdentity.wrist.x,wrist.y-previousIdentity.wrist.y);
+    const jumped=previous.tracking && Math.hypot(tip.x-previous.tracking.tips[0].x,tip.y*(frame.aspect??1)-previous.tracking.tips[0].y)>.11;
+    if(frame.t-previousIdentity.t>230 || moved>.07 || jumped || ratio>=limits.exit || features.gesture==='FIST') {
+      end('hand returned in a different position or pose',true);
+      state.armed=false;
+    }
+    state.heldThroughLoss=false;
+  }
   const wasPinching=state.pinching;
   if(!state.pinching){
     const closed=ratio<limits.enter&&features.gesture!=='FIST';
@@ -47,11 +63,16 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
     state.closeFrames=closed?state.closeFrames+1:0;
     state.pinching=state.closeFrames>=2 && frame.t-(state.closeSince??frame.t)>=24;
   }
-  else if(ratio>=limits.exit||features.gesture==='FIST'){state.pinching=false;state.closeFrames=0;state.closeSince=undefined;}
+  else {
+    state.releaseFrames=ratio>=limits.exit?(state.releaseFrames??0)+1:0;
+    if(features.gesture==='FIST' || ratio>=limits.exit && (!frame.mobile || ratio>=limits.exit+.10 || state.releaseFrames>=2)){
+      state.pinching=false;state.closeFrames=0;state.closeSince=undefined;state.releaseFrames=0;
+    }
+  }
   // Candidate starts at the first observed sample crossing 0.6, before close confirmation.
-  if(!wasPinching){if(ratio>=limits.lead){state.candidate=undefined;state.ring=[];state.armed=true;}else if(state.candidate===undefined)state.candidate=frame.t;}
+  if(!wasPinching){if(frame.mobile && ratio>=limits.exit && features.gesture!=='FIST')state.armed=true;if(ratio>=limits.lead){state.candidate=undefined;state.ring=[];state.armed=true;}else if(state.candidate===undefined)state.candidate=frame.t;}
   const oldX=state.fx?.value,oldY=state.fy?.value;
-  state.fx=filter(x*width,frame.t,state.fx,settings.smoothness);state.fy=filter(y*height,frame.t,state.fy,settings.smoothness);
+  state.fx=filter(x*width,frame.t,state.fx,settings.smoothness,maxGap);state.fy=filter(y*height,frame.t,state.fy,settings.smoothness,maxGap);
   // Limit cursor displacement on the confirmation frame, in CSS pixels.
   const onset=state.pinching&&!wasPinching;
   if(onset&&oldX!==undefined&&oldY!==undefined){const dx=state.fx.value-oldX,dy=state.fy.value-oldY,d=Math.hypot(dx,dy);if(d>8){state.fx={...state.fx,value:oldX+dx*8/d};state.fy={...state.fy,value:oldY+dy*8/d};}}

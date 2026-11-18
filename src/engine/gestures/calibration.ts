@@ -15,5 +15,5 @@ export function calibrate(open:number[],closed:number[],createdAt=Date.now()):{p
   const enter=Math.min(.65,Math.max(.10,quantile(closed,.9)+gap*.16)),exit=Math.min(1.1,Math.max(enter+.10,cm+gap*.48)),lead=Math.min(1.4,Math.max(exit+.08,cm+gap*.66));
   return{profile:{enter,exit,lead,openMedian:om,closedMedian:cm,noise,samples:open.length+closed.length,createdAt}};
 }
-export function thresholds(profile?:PinchCalibration){return validCalibration(profile)?{enter:profile.enter,exit:profile.exit,lead:profile.lead}:{enter:.30,exit:.50,lead:.60};}
+export function thresholds(profile?:PinchCalibration,mobile=false){return validCalibration(profile)?{enter:profile.enter,exit:profile.exit,lead:profile.lead}:mobile?{enter:.40,exit:.57,lead:.67}:{enter:.30,exit:.50,lead:.60};}
 export function profileMatches(profile:PinchCalibration|undefined,cameraId:string,aspect:number,drawingHand?:string){return !profile||(validCalibration(profile)&&(!profile.drawingHand||!drawingHand||profile.drawingHand===drawingHand)&&(!profile.cameraId||profile.cameraId===cameraId)&&(!profile.aspect||Math.abs(profile.aspect-aspect)<.08));}

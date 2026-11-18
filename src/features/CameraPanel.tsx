@@ -35,7 +35,7 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
     const tracker=new CameraTracker(video.current,(hands,m)=>{
       if(!alive)return;if(key!==callbacks.current.sessionKey){finish('page changed');key=callbacks.current.sessionKey;}
       if(!loaded){loaded=true;setLoading(false);void navigator.mediaDevices.enumerateDevices().then(ds=>{if(alive)setDevices(ds.filter(d=>d.kind==='videoinput'));}).catch(()=>{});}
-      const frame:Frame={t:m.t,hands,inputMirrored:m.inputMirrored,aspect:m.aspect,viewport:{width:window.innerWidth,height:window.innerHeight}},compatible=profileMatches(currentSettings.current.calibration,m.cameraId,m.aspect,drawingHand(currentSettings.current)),s:GestureSettings=recordRef.current&&recordSettings.current?recordSettings.current:{...currentSettings.current,calibration:compatible?currentSettings.current.calibration:undefined};activeSettings.current=s;
+      const frame:Frame={t:m.t,hands,inputMirrored:m.inputMirrored,aspect:m.aspect,mobile:/Android|iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1),viewport:{width:window.innerWidth,height:window.innerHeight}},compatible=profileMatches(currentSettings.current.calibration,m.cameraId,m.aspect,drawingHand(currentSettings.current)),s:GestureSettings=recordRef.current&&recordSettings.current?recordSettings.current:{...currentSettings.current,calibration:compatible?currentSettings.current.calibration:undefined};activeSettings.current=s;
       if(recordRef.current&&records.current.length<5400)records.current.push({...frame,label:labelRef.current});
       const common:Context={paused:pauseRef.current||calibrationRef.current,presentation:callbacks.current.presentation};
       const captured=state.mode==='transform';
@@ -46,7 +46,7 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
         const dialog=!!document.querySelector('dialog[open]');
         return {overUI:!!target||dialog,allowInk:captured||(!target&&!dialog&&callbacks.current.boardContains(x,y))};
       });
-      calibrationFeed.current?.({t:m.t,ratio:output.state.features?.pinch,wrist:output.state.identity?.wrist,hands:hands.length,lowLight:m.lowLight,cameraId:m.cameraId,aspect:m.aspect});
+      calibrationFeed.current?.({t:m.t,ratio:output.state.features?.pinch,wrist:output.state.identity?.wrist,hands:hands.length,lowLight:m.lowLight,cameraId:m.cameraId,aspect:m.aspect,mobile:frame.mobile});
       state=output.state;
       // End drawing before dispatching a control. A toolbar pinch is never pen-down.
       output.events.forEach(e=>callbacks.current.onInput(e));
@@ -59,7 +59,12 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
         setMetrics({...m,hands:hands.length,gesture:output.gesture,activeHand:output.activeHand,state:state.mode.toUpperCase(),compatible});
         callbacks.current.onStatus(m.lowLight?'Low light - brighten your drawing hand':output.status);lastUI=m.t;
       }
-    },message=>{if(alive){finish('camera error');setFolded(false);setPreview(true);setMetrics(m=>({...m,hands:0,fps:0,captureFPS:0}));setError(message);setLoading(false);callbacks.current.onStatus('Camera stopped — mouse and touch ready');}});
+    },message=>{if(alive){finish('camera error');setFolded(false);setPreview(true);setMetrics(m=>({...m,hands:0,fps:0,captureFPS:0}));setError(message);setLoading(false);callbacks.current.onStatus('Camera stopped — mouse and touch ready');}},()=>{
+      if(!alive)return;
+      finish('camera recovering');setFolded(false);setPreview(true);setLoading(true);loaded=false;
+      setMetrics(m=>({...m,hands:0,fps:0,captureFPS:0}));
+      callbacks.current.onStatus('Reconnecting camera');
+    });
     void tracker.start(device||undefined);
     const visibility=()=>{if(document.hidden){tracker.stop();finish('tab hidden');setFolded(false);setError('Camera stopped while this tab was hidden. Restart when ready.');setLoading(false);}};
     document.addEventListener('visibilitychange',visibility);

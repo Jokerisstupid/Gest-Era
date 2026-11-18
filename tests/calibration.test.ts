@@ -56,3 +56,36 @@ it('processes advancing video time when native frame callbacks stall, then cance
     globalThis.cancelAnimationFrame=originalCancel;
   }
 });
+
+it('uses changing camera pixels when the iPhone video clock sticks, without replaying static frames',({mock})=>{
+  let clock=0, image=123, animation:FrameRequestCallback|undefined;
+  mock.method(performance,'now',()=>clock);
+  const originalAnimation=globalThis.requestAnimationFrame;
+  const originalCancel=globalThis.cancelAnimationFrame;
+  globalThis.requestAnimationFrame=callback=>{animation=callback;return 41;};
+  globalThis.cancelAnimationFrame=()=>{};
+  try {
+    const video={paused:false,readyState:2,videoWidth:360,videoHeight:480,currentTime:0} as HTMLVideoElement;
+    const frames:number[]=[];
+    const stop=watchCameraFrames(video,t=>frames.push(t),()=>image);
+    animation!(clock);
+    clock=100;animation!(clock);
+    assert.deepEqual(frames,[]);
+    image=456;clock=200;animation!(clock);
+    clock=300;animation!(clock);
+    assert.deepEqual(frames,[200]);
+    stop();
+  } finally {
+    globalThis.requestAnimationFrame=originalAnimation;
+    globalThis.cancelAnimationFrame=originalCancel;
+  }
+});
+
+it('collects a phone calibration across short dropped detections and a slow camera',()=>{
+  let state=initialCapture();
+  for(let i=0;i<40 && !state.done;i++) {
+    state=captureStep(state,{...observation(i*150,1.1,i%8===5?0:1),mobile:true},'open');
+  }
+  assert.equal(state.done,true);
+  assert.ok(state.samples.length>=24);
+});

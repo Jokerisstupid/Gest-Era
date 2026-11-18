@@ -11,6 +11,8 @@ export interface CaptureMetrics {
 }
 
 const model='/mediapipe/hand_landmarker.task';
+const isAppleMobile=()=> /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
 function deadline<T>(pending:Promise<T>, ms:number, message:string):Promise<T> {
   return new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>reject(Error(message)),ms);
@@ -31,10 +33,12 @@ export class CameraTracker {
   private watchdog?:ReturnType<typeof setInterval>;
   private permission=new AbortController();
   private stopped=false;
+  private recovered=false;
   constructor(
     private video:HTMLVideoElement,
     private onFrame:(hands:Hand[],metrics:CaptureMetrics)=>void,
-    private onError:(message:string)=>void
+    private onError:(message:string)=>void,
+    private onRecover:()=>void=()=>{}
   ) {}
 
   private fail(error:unknown) {
@@ -59,11 +63,21 @@ export class CameraTracker {
     }
   }
 
+  private releaseStream() {
+    this.video.onpause=null;
+    this.stream?.getTracks().forEach(track=>{track.onended=null;track.stop();});
+    this.stream=undefined;
+    this.video.pause();
+    this.video.srcObject=null;
+  }
+
   async start(deviceId?:string) {
     try {
       if(!navigator.mediaDevices?.getUserMedia) throw Error('Open GestEra directly in your browser over HTTPS to use the camera.');
+      const appleMobile=isAppleMobile();
+      const width=appleMobile?480:640,height=appleMobile?360:480;
       const stream=await acquireCamera(navigator.mediaDevices.getUserMedia({
-        video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30},
+        video:{width:{ideal:width},height:{ideal:height},frameRate:{ideal:30},
           ...(deviceId?{deviceId:{exact:deviceId}}:{facingMode:{ideal:'user'}})},audio:false
       }),this.permission.signal);
       if(this.stopped) {stream.getTracks().forEach(track=>track.stop());return;}
@@ -76,14 +90,12 @@ export class CameraTracker {
       this.video.srcObject=stream;
       await deadline(this.video.play(),8000,'The camera opened but video did not start. Tap Restart camera to retry.');
       if(this.stopped) return;
-      const appleMobile=/iPad|iPhone|iPod/.test(navigator.userAgent) ||
-        (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
-      await this.loadBackend(appleMobile);
-      if(!this.stopped) this.trackFrames(track,appleMobile);
+      if(!this.backend) await this.loadBackend(appleMobile);
+      if(!this.stopped) this.trackFrames(track,appleMobile,appleMobile,deviceId);
     } catch(error) {this.fail(error);}
   }
 
-  private trackFrames(track:MediaStreamTrack, compatible:boolean) {
+  private trackFrames(track:MediaStreamTrack, compatible:boolean, mobileCapture:boolean, deviceId?:string) {
     const captured:number[]=[], processed:number[]=[];
     const sample=document.createElement('canvas');
     sample.width=16;
@@ -92,13 +104,23 @@ export class CameraTracker {
     const cameraId=track.getSettings?.().deviceId??'default';
     let lastFrame=performance.now(), lastLight=-Infinity, lowLight=false;
 
+    const fingerprint=mobileCapture && ctx?()=>{
+      try {
+        ctx.drawImage(this.video,0,0,16,12);
+        const {data}=ctx.getImageData(0,0,16,12);
+        let hash=0;
+        for(let i=0;i<data.length;i+=4) hash=Math.imul(hash,31)+data[i]+data[i+1]*257+data[i+2]*65537|0;
+        return hash;
+      } catch {return NaN;}
+    }:undefined;
+
     this.stopFrames=watchCameraFrames(this.video,t=>{
       lastFrame=t;
       const captureFPS=frameRate(captured,t);
       if(this.gate.busy) return;
       const aspect=this.video.videoHeight/this.video.videoWidth;
       void this.gate.run(async ()=>{
-        if(t-lastLight>2000 && ctx) {
+        if(!mobileCapture && t-lastLight>2000 && ctx) {
           try {
             ctx.drawImage(this.video,0,0,16,12);
             const {data}=ctx.getImageData(0,0,16,12);
@@ -122,13 +144,24 @@ export class CameraTracker {
         this.backend?.close();
         this.backend=undefined;
         void this.loadBackend(true).then(()=>{
-          if(!this.stopped) this.trackFrames(track,true);
+          if(!this.stopped) this.trackFrames(track,true,mobileCapture,deviceId);
         },failure=>this.fail(failure));
       });
-    });
+    },fingerprint);
 
     this.watchdog=setInterval(()=>{
-      if(performance.now()-lastFrame>=5000) this.fail(Error('No live video frames are coming from the camera. Check that it is available, then tap Restart camera.'));
+      const gap=performance.now()-lastFrame;
+      if(mobileCapture && !this.recovered && gap>=2500 && !document.hidden) {
+        this.recovered=true;
+        this.stopFrames?.();
+        clearInterval(this.watchdog);
+        this.onRecover();
+        this.releaseStream();
+        this.video.load();
+        void this.start(deviceId);
+      } else if(gap>=6000) {
+        this.fail(Error('The live camera feed froze. Tap Restart camera to reopen it.'));
+      }
     },500);
     this.video.onpause=()=>{
       if(!this.stopped && !document.hidden && this.stream?.active) void this.video.play().catch(()=>{});
@@ -141,11 +174,7 @@ export class CameraTracker {
     this.gate.stop();
     this.stopFrames?.();
     clearInterval(this.watchdog);
-    this.video.onpause=null;
-    this.stream?.getTracks().forEach(track=>{track.onended=null;track.stop();});
-    this.stream=undefined;
-    this.video.pause();
-    this.video.srcObject=null;
+    this.releaseStream();
     this.backend?.close();
     this.backend=undefined;
   }

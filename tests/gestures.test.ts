@@ -106,3 +106,30 @@ describe('cross-device pinch input',()=>{
     assert.equal(held.state.mode,'hover');
   });
 });
+
+describe('mobile pinch tolerance',()=>{
+  it('keeps one Android stroke through a short dropout and near-threshold noise',()=>{
+    let state=initialEngineState();
+    const record=(t:number,ratio?:number)=>{
+      const output=step({t,mobile:true,hands:ratio===undefined?[]:[syntheticHand('pinch',ratio)]},state,settings);
+      state=output.state;
+      return output.events.map(event=>event.type);
+    };
+    record(0,.9);
+    record(165,.36);
+    assert.deepEqual(record(330,.36),['begin']);
+    assert.deepEqual(record(412),[]);
+    assert.deepEqual(record(500,.36),['point']);
+    assert.deepEqual(record(580,.59),['point']);
+    assert.deepEqual(record(660,.36),['point']);
+    assert.deepEqual(record(740,.85),['end']);
+  });
+
+  it('ends the stroke when the hand reappears far from the last point',()=>{
+    let state=initialEngineState();
+    for(const t of [0,80,145])state=step({t,mobile:true,hands:[syntheticHand('pinch',.24)]},state,settings).state;
+    const missing=step({t:200,mobile:true,hands:[]},state,settings);
+    const result=step({t:270,mobile:true,hands:[syntheticHand('pinch',.24,.12)]},missing.state,settings);
+    assert.deepEqual(result.events.map(event=>event.type),['end']);
+  });
+});

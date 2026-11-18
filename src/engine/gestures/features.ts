@@ -18,4 +18,4 @@ export function extractFeatures(hand:Hand,previous?:Features,aspect=1):Features|
   return{pinch,palm,extended,thumb,gesture};
 }
 // A continuous geometric anchor; it never branches on pen-up / pen-down state.
-export function cursorAnchor(hand:Hand,ratio:number,profile?:PinchCalibration){const p=thresholds(profile),start=p.lead+.25,end=p.enter*5/6;const s=clamp((start-ratio)/(start-end)),w=s*s*(3-2*s);const tip=hand.landmarks[8],thumb=hand.landmarks[4];return{x:tip.x+(thumb.x-tip.x)*w/2,y:tip.y+(thumb.y-tip.y)*w/2};}
+export function cursorAnchor(hand:Hand,ratio:number,profile?:PinchCalibration,mobile=false){const p=thresholds(profile,mobile),start=p.lead+.25,end=p.enter*5/6;const s=clamp((start-ratio)/(start-end)),w=s*s*(3-2*s);const tip=hand.landmarks[8],thumb=hand.landmarks[4];return{x:tip.x+(thumb.x-tip.x)*w/2,y:tip.y+(thumb.y-tip.y)*w/2};}

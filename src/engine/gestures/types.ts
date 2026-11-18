@@ -5,7 +5,7 @@ import type { TransformSession } from './transform';
 import type { TrackingSample } from './tracking-quality';
 export type { Landmark, Gesture };
 export interface Hand { landmarks: Landmark[]; worldLandmarks?: Landmark[]; side: string; score: number; }
-export interface Frame { t: number; hands: Hand[]; inputMirrored?: boolean; aspect?: number; viewport?: { width:number; height:number }; }
+export interface Frame { t: number; hands: Hand[]; inputMirrored?: boolean; aspect?: number; mobile?:boolean; viewport?: { width:number; height:number }; }
 export type Smoothness = 'precise' | 'balanced' | 'fast';
 export interface GestureSettings { dominantHand: 'Left'|'Right'; swapHands: boolean; mirror: boolean; region: number; smoothness: Smoothness; calibration?:PinchCalibration;guardCommands?:boolean; }
 export const defaultGestureSettings: GestureSettings = {dominantHand:'Right',swapHands:false,mirror:true,region:.16,smoothness:'balanced',guardCommands:true};
@@ -16,7 +16,7 @@ export interface Identity { wrist: Landmark; velocity: Landmark; t: number; side
 export interface CommandState { ready: number; wrist?: Landmark; lastT: number; fistSince?: number; fired: boolean; cooldown: number; swipe: {x:number;y:number;t:number}[];openSince?:number;armed?:boolean;actionSince?:number;action?:string; }
 export interface EngineState {
   t: number; identity?: Identity; identityConfig?: string; features?: Features; commandFeatures?: Features;
-  fx?: FilterState; fy?: FilterState; pinching: boolean; closeFrames: number; closeSince?:number;
+  fx?: FilterState; fy?: FilterState; pinching: boolean; closeFrames: number; closeSince?:number; releaseFrames?:number; heldThroughLoss?:boolean;
   mode: 'hover'|'ink'|'erase'|'transform'; ring: Sample[]; candidate?: number;
   pending: Sample[]; lastRatio?: number; eraseFrames: number; eraseSince?:number;armed: boolean;tracking?:TrackingSample;
   command: CommandState; transform?: TransformSession; transformReady: number;

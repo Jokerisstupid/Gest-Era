@@ -1,0 +1,97 @@
+.notebook-ribbon {
+  position: relative;
+  flex: 0 0 auto;
+  color: #dfebfd;
+  background: #18263d;
+  border-block: 1px solid #34465f;
+  padding: 4px clamp(8px, 2vw, 28px) 7px;
+}
+.ribbon-groups, .ribbon-controls, .note-format, .property-options > div,
+.ribbon-zoom { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.ribbon-groups button, .ribbon-controls button, .note-format button,
+.property-options button, .section-destinations button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  border: 1px solid transparent; border-radius: 7px; padding: 6px 10px;
+  min-height: 38px; color: #d7e2f6; font-size: 13px; line-height: 1.2;
+}
+.ribbon-groups button { font-weight: 600; border-radius: 0; border-bottom-width: 2px; }
+.ribbon-groups button[aria-pressed=true] { color: #e6dcff; border-bottom-color: #bc9bff; }
+.ribbon-controls { margin-top: 5px; }
+.ribbon-controls button:hover, .property-options button:hover, .note-format button:hover { background: #2d405d; }
+.ribbon-controls button[aria-pressed=true], .property-options button[aria-pressed=true],
+.note-format button[aria-pressed=true] { background: #394367; border-color: #9fafe0; color: white; }
+.ribbon-controls i, .property-options i {
+  width: 16px; height: 16px; border-radius: 50%; border: 1px solid #ffffff88; display: inline-block;
+}
+.ribbon-controls button:disabled { opacity: .42; }
+.ribbon-zoom { gap: 3px; }
+.ribbon-zoom i { display: none; }
+.ribbon-zoom span { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+.property-options h3 { font-size: 14px; margin: 20px 0 8px; }
+.property-options > div { gap: 7px; }
+.property-options button, .note-format button, .section-destinations button { border-color: #465b7b; min-height: 44px; }
+.property-options label { display: inline-flex; align-items: center; gap: 8px; margin: 8px 4px; font-size: 13px; }
+.property-options input[type=color] { width: 34px; }
+.note-format { margin-bottom: 12px; }
+.note-format output { font-size: 12px; min-width: 38px; text-align: center; }
+.section-destinations { display: grid; gap: 5px; margin: 5px 0 10px; }
+.section-destinations button { margin: 2px; }
+.gesture-mode .notebook-ribbon [data-gesture] { min-width: 56px; min-height: 48px; }
+.gesture-mode .camera-panel.is-folded { bottom: 12px; height: auto; max-height: none; }
+.camera-panel.is-folded > :not(.camera-head) { display: none; }
+.camera-head .camera-fold { margin-left: auto; font-size: 11px; padding-inline: 8px; }
+.input-layer { touch-action: none; }
+@media (min-width: 1150px) {
+  .notebook-ribbon { display: flex; align-items: center; gap: 18px; }
+  .ribbon-controls { margin: 0; padding-left: 14px; border-left: 1px solid #40536d; }
+}
+@media (max-width: 650px) {
+  .ribbon-controls { display: grid; grid-template-columns: repeat(auto-fit,minmax(62px,1fr)); }
+  .ribbon-controls button { font-size: 11px; padding: 5px 2px; gap: 3px; flex-direction: column; }
+  .ribbon-controls .ribbon-zoom { grid-column: span 3; }
+  .ribbon-zoom button { flex: 1; }
+  .gesture-mode .notebook-ribbon [data-gesture] { min-width: 0; min-height: 44px; }
+  .gesture-mode .camera-panel, .gesture-mode .camera-panel.is-folded { bottom: 74px; }
+  .gesture-mode .camera-panel.is-folded { width: min(210px, 75vw); }
+  .property-tabs { justify-content: space-between; }
+  .property-tabs button { padding-inline: 6px; }
+}
+@media (max-height: 520px) {
+  .notebook-ribbon { padding-block: 2px; }
+  .board-app .page-context { display: none; }
+  .gesture-mode .camera-panel { max-height: 65dvh; }
+}
+
+.matching-pages { display:grid; gap:3px; max-height:170px; overflow:auto; margin:0 16px 14px; }
+.matching-pages a { display:flex; gap:8px; align-items:center; min-height:38px; padding:6px 9px; border-radius:6px; background:#243751; color:#e0eafa; font-size:12px; }
+.matching-pages a span { color:#a9b9d2; }
+.matching-pages a svg { margin-left:auto; flex-shrink:0; }
+
+.note-keyboard { display:grid; gap:5px; margin:12px 0; }
+.note-key-row, .note-key-actions { display:flex; justify-content:center; flex-wrap:wrap; gap:4px; }
+.note-keyboard button, .keyboard-toggle, .dialog-scroll-controls button {
+  border:1px solid #485d7d; border-radius:7px; background:#20334f; color:#eef4ff;
+  padding:7px 10px; min-height:42px; font-size:14px;
+}
+.note-key-row button { flex:1 1 0; }
+.note-keyboard button[aria-pressed=true] { border-color:#c0a6ff; background:#394367; }
+.keyboard-toggle { margin-top:8px; }
+.dialog-scroll-controls { position:sticky; top:0; display:flex; justify-content:flex-end; gap:6px; z-index:2; background:#16243b; padding:4px 0; }
+.dialog-scroll-controls button:disabled { opacity:.45; }
+.gesture-mode .note-keyboard button { min-width:44px; min-height:44px; }
+@media(max-width:650px),(max-height:550px) {
+  .note-key-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(44px,1fr)); }
+  .note-key-actions button { flex:1; }
+  .note-keyboard button { padding:5px; }
+  .modal:has(.note-keyboard) textarea { max-height:75px; }
+}
+
+.page-content-items { padding-inline-start:2rem; margin-block:1rem; }
+.page-content-items li { padding:.5rem; border-bottom:1px solid #586a84; }
+.page-content-items li > span { display:block; white-space:pre-wrap; overflow-wrap:anywhere; }
+.page-content-items li button { margin:.25rem .5rem 0 0; min-height:44px; padding:.4rem .8rem; border:1px solid currentColor; border-radius:6px; }
+.board-app :focus-visible { outline:3px solid #afcaff; outline-offset:-3px; }
+@media (forced-colors:active) {
+  .board-app :focus-visible { outline-color:Highlight; }
+  .board-app button[aria-pressed=true] { border:2px solid Highlight; }
+}

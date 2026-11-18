@@ -4,6 +4,8 @@
   "version": "0.4.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/setup-vision.mjs",
+    "prebuild": "node scripts/setup-vision.mjs",
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "test": "node --import ./scripts/register-ts.mjs --test src/engine/core.test.ts tests/gestures.test.ts tests/practical.test.ts tests/notebooks.test.ts tests/calibration.test.ts",

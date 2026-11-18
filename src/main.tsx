@@ -11,6 +11,7 @@ import { useSettings } from './store/settings';
 import './styles.css';
 import './gesture-styles.css';
 import './notebook-styles.css';
+import './editor.css';
 const Board = lazy(() => import('./features/Board'));
 class ErrorBoundary extends Component<{
     children: ReactNode;

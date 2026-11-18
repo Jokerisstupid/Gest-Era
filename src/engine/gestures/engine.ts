@@ -1,11 +1,11 @@
-import { clamp, cursorAnchor, distance, extractFeatures } from './features';
+import { clamp, cursorAnchor, extractFeatures } from './features';
 import { filter } from './filter';
 import { selectHands } from './identity';
 import { thresholds } from './calibration';
 import { transformStep } from './transform';
 import { commandStep } from './commands';
 import { isolatedTipJump,trackingSample } from './tracking-quality';
-import { initialEngineState, type Context, type EngineEvent, type EngineOutput, type EngineState, type Frame, type GestureSettings, type Sample } from './types';
+import { initialEngineState, type Context, type Cursor, type EngineEvent, type EngineOutput, type EngineState, type Frame, type GestureSettings, type Sample } from './types';
 
 export function releaseCutoff(samples:Sample[]):number|undefined {
   // Only the final two opening samples can be removed. Normal movement is not trimmed.
@@ -15,14 +15,15 @@ export function releaseCutoff(samples:Sample[]):number|undefined {
   }
   return cut<samples.length-1?samples[cut].t:undefined;
 }
-export function step(frame:Frame,previous:EngineState,settings:GestureSettings,context:Context={}):EngineOutput {
+export function step(frame:Frame,previous:EngineState,settings:GestureSettings,context:Context={},route?:(cursor:Cursor)=>Pick<Context,'overUI'|'allowInk'>):EngineOutput {
   const events:EngineEvent[]=[];
   const state:EngineState={...previous,ring:[...previous.ring],pending:[...previous.pending],command:{...previous.command,swipe:[...previous.command.swipe]}};
   const end=(reason:string,trim=false)=>{if(state.mode==='ink'||state.mode==='erase')events.push({type:'end',reason,...(trim&&state.mode==='ink'?{trimAfter:releaseCutoff(state.ring)}:{})});state.mode='hover';state.pending=[];};
-  const reset=()=>{state.pinching=false;state.closeFrames=0;state.candidate=undefined;state.ring=[];state.fx=state.fy=undefined;state.features=state.commandFeatures=undefined;state.lastRatio=undefined;state.eraseFrames=0;state.eraseSince=undefined;state.tracking=undefined;};
+  const reset=()=>{state.pinching=false;state.closeFrames=0;state.closeSince=undefined;state.candidate=undefined;state.ring=[];state.fx=state.fy=undefined;state.features=state.commandFeatures=undefined;state.lastRatio=undefined;state.eraseFrames=0;state.eraseSince=undefined;state.tracking=undefined;state.transform=undefined;state.transformReady=0;state.command=initialEngineState().command;};
   if(frame.t<=previous.t)return{state:previous,events:[],gesture:'NONE',status:'Waiting for a new camera frame',activeHand:'None',commandReady:false};
-  const identityConfig=`${settings.dominantHand}:${settings.swapHands}:${settings.calibration?.enter??.3}:${settings.calibration?.exit??.5}`;
-  if(previous.identityConfig!==identityConfig){end('hand preference changed');state.identity=undefined;reset();}
+  const width=Math.max(1,frame.viewport?.width??1440),height=Math.max(1,frame.viewport?.height??900);
+  const identityConfig=`${settings.dominantHand}:${settings.swapHands}:${width}x${height}:${settings.mirror}:${settings.region}:${settings.calibration?.enter??.3}:${settings.calibration?.exit??.5}`;
+  if(previous.identityConfig!==identityConfig){end('hand preference changed');state.identity=undefined;reset();if(previous.identityConfig)state.armed=false;}
   state.identityConfig=identityConfig;
   const discontinuity=frame.t-previous.t>150;
   if(discontinuity){end('camera frame gap',true);reset();state.identity=frame.t-previous.t>300?undefined:state.identity;state.armed=previous.armed&&!previous.pinching;}
@@ -40,22 +41,27 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
   const ratio=features.pinch,anchor=cursorAnchor(hand,ratio,settings.calibration),margin=clamp(settings.region,.03,.32);
   const x=((settings.mirror?1-anchor.x:anchor.x)-margin)/(1-2*margin),y=(anchor.y-margin)/(1-2*margin);
   const wasPinching=state.pinching;
-  if(!state.pinching){state.closeFrames=ratio<limits.enter&&features.gesture!=='FIST'?state.closeFrames+1:0;if(state.closeFrames>=2)state.pinching=true;}
-  else if(ratio>=limits.exit||features.gesture==='FIST'){state.pinching=false;state.closeFrames=0;}
+  if(!state.pinching){
+    const closed=ratio<limits.enter&&features.gesture!=='FIST';
+    state.closeSince=closed?(state.closeSince??frame.t):undefined;
+    state.closeFrames=closed?state.closeFrames+1:0;
+    state.pinching=state.closeFrames>=2 && frame.t-(state.closeSince??frame.t)>=24;
+  }
+  else if(ratio>=limits.exit||features.gesture==='FIST'){state.pinching=false;state.closeFrames=0;state.closeSince=undefined;}
   // Candidate starts at the first observed sample crossing 0.6, before close confirmation.
   if(!wasPinching){if(ratio>=limits.lead){state.candidate=undefined;state.ring=[];state.armed=true;}else if(state.candidate===undefined)state.candidate=frame.t;}
   const oldX=state.fx?.value,oldY=state.fy?.value;
-  state.fx=filter(x*1440,frame.t,state.fx,settings.smoothness);state.fy=filter(y*900,frame.t,state.fy,settings.smoothness);
-  // Constrain just the second closing sample (the confirmation frame). Do not impose
-  // a handwriting speed limit. This geometric check is independent of the pen-state flag.
-  const onset=ratio<limits.enter&&(state.lastRatio??Infinity)<limits.enter&&(previous.ring.at(-2)?.ratio??Infinity)>=limits.enter;
+  state.fx=filter(x*width,frame.t,state.fx,settings.smoothness);state.fy=filter(y*height,frame.t,state.fy,settings.smoothness);
+  // Limit cursor displacement on the confirmation frame, in CSS pixels.
+  const onset=state.pinching&&!wasPinching;
   if(onset&&oldX!==undefined&&oldY!==undefined){const dx=state.fx.value-oldX,dy=state.fy.value-oldY,d=Math.hypot(dx,dy);if(d>8){state.fx={...state.fx,value:oldX+dx*8/d};state.fy={...state.fy,value:oldY+dy*8/d};}}
-  const point:Sample={x:clamp(state.fx.value/1440),y:clamp(state.fy.value/900),t:frame.t,ratio};
+  const point:Sample={x:clamp(state.fx.value/width),y:clamp(state.fy.value/height),t:frame.t,ratio};
   const priorRing=[...state.ring];
   state.ring.push(point);state.ring=state.ring.filter(p=>frame.t-p.t<=350).slice(-12);
   const gesture=state.pinching?'PINCH':features.gesture;
-  const cursor={...point,hand:state.identity!.side,gesture,eraser:gesture==='PEACE'};
   const outside=x<0||x>1||y<0||y>1;
+  const cursor={...point,inBounds:!outside,hand:state.identity!.side,gesture,eraser:gesture==='PEACE'};
+  if(route)context={...context,...route(cursor)};
   // Paused means no writing or direct commands; cursor clicks can still resume tracking.
   const captured=previous.mode==='transform';
   const blocked=context.paused||(!captured&&(context.overUI||outside||context.allowInk===false));
@@ -68,7 +74,7 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
   if(dualPinch&&state.transformReady<3){end('confirming two-hand intent',true);state.armed=false;return{state,events,cursor,gesture:'PINCH',status:'Hold both pinches — preparing zoom',activeHand:state.identity!.side,commandReady:false};}
   if(dualPinch&&state.transformReady>=3){
     end('two-hand transform');state.armed=false;
-    const a=hand.landmarks[0],b=second!.landmarks[0],dist=distance(a,b),mid={x:settings.mirror?1-(a.x+b.x)/2:(a.x+b.x)/2,y:(a.y+b.y)/2};
+    const a=hand.landmarks[0],b=second!.landmarks[0],dist=Math.hypot(a.x-b.x,(a.y-b.y)*(frame.aspect??1)),mid={x:settings.mirror?1-(a.x+b.x)/2:(a.x+b.x)/2,y:(a.y+b.y)/2};
     const transformed=transformStep(dist,mid,frame.t,state.transform);
     if(state.transform)events.push({type:'transform',scale:transformed.scale,factor:transformed.state.scale,dx:transformed.dx/(1-2*margin),dy:transformed.dy/(1-2*margin),anchor:{x:clamp((mid.x-margin)/(1-2*margin)),y:clamp((mid.y-margin)/(1-2*margin))}});
     else events.push({type:'transform-start'});
@@ -88,7 +94,15 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
     if(state.pinching&&state.armed){
       if(state.mode==='erase')end('switch to ink');
       if(state.mode!=='ink'){
-        const points=state.ring.filter(p=>p.t>=(state.candidate??frame.t));
+        // Limit lead-in ink to the recent approach near confirmed contact.
+        const earliest=Math.max(state.candidate??frame.t,frame.t-180);
+        let first=state.ring.length-1;
+        while(first>0){
+          const prior=state.ring[first-1];
+          if(prior.t<earliest || Math.hypot((point.x-prior.x)*width,(point.y-prior.y)*height)>45)break;
+          first--;
+        }
+        const points=state.ring.slice(first);
         events.push({type:'begin',point:points[0]??point,points:points.length?points:[point],erase:false});state.mode='ink';
       }else events.push({type:'point',point,erase:false});
     }else if(gesture==='PEACE'&&state.armed&&state.eraseFrames>=2&&state.eraseSince!==undefined&&frame.t-state.eraseSince>=100){

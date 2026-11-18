@@ -14,3 +14,4 @@ GESTURE_REPLAY_RESULTS.json
 PRACTICAL_REPLAY_RESULTS.json
 public/mediapipe/wasm/
 public/mediapipe/vision_bundle.js
+public/mediapipe/hand_landmarker.task

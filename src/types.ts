@@ -1,4 +1,4 @@
-export type Tool = 'pen' | 'highlighter' | 'eraser' | 'select' | 'shape' | 'text' | 'laser' | 'hand';
+export type Tool = 'pen' | 'highlighter' | 'eraser' | 'select' | 'shape' | 'text' | 'laser' | 'hand' | 'lasso';
 export type Background = 'blank' | 'grid' | 'ruled' | 'dots';
 export type Point = {
     x: number;
@@ -32,6 +32,8 @@ export type TextObject = BaseObject & {
     y: number;
     text: string;
     fontSize: number;
+    bold?: boolean;
+    italic?: boolean;
 };
 export type BoardObject = Stroke | ShapeObject | TextObject;
 export type Page = {

@@ -23,7 +23,7 @@ function syntheticHand(pose:'open'|'point'|'peace'|'fist'|'pinch'='open',ratio?:
 }
 const settings={...defaultGestureSettings,region:.05};
 function sequence(ratios:number[]){let state=initialEngineState();const out=[];for(let i=0;i<ratios.length;i++){const o=step({t:i*50,hands:[syntheticHand('pinch',ratios[i])]},state,settings);state=o.state;out.push(o);}return out;}
-describe('real camera regression — supplied 541-frame session',()=>{
+describe('real camera regression — supplied 541-frame session',{skip:!fs.existsSync(new URL('./fixtures/user-session.json',import.meta.url))},()=>{
   const recording=JSON.parse(fs.readFileSync(new URL('./fixtures/user-session.json',import.meta.url),'utf8')) as Recording;
   it('retains real provenance and reproduces the four old pause toggles',()=>{const result=comparison(recording);assert.equal(result.evidence.frames,541);assert.equal(result.evidence.handFrames,291);assert.equal(result.before.commands.filter(e=>e.type==='pause-toggle').length,4);});
   it('emits zero pause, undo or page actions with only one recorded hand',()=>{const result=replay(recording);assert.equal(result.events.filter(e=>['pause-toggle','undo','page'].includes(e.type)).length,0);assert.equal(result.strokes.length,3);});
@@ -76,4 +76,33 @@ describe('timing, rendering geometry and shape fitting — synthetic',()=>{
   it('snaps a straight stroke into one line object with the same identity',()=>{const s=stroke(path([[0,0],[200,0]])),fit=recognizeShape(s);assert.equal(fit?.shape,'line');assert.equal(fit?.id,s.id);});
   it('fits a rectangle, ellipse, triangle and arrow',()=>{assert.equal(recognizeShape(stroke(path([[0,0],[200,0],[200,120],[0,120],[0,0]])))?.shape,'rectangle');const ellipse=Array.from({length:81},(_,i)=>({x:100+90*Math.cos(i/80*Math.PI*2),y:100+60*Math.sin(i/80*Math.PI*2),t:i}));assert.equal(recognizeShape(stroke(ellipse))?.shape,'ellipse');assert.equal(recognizeShape(stroke(path([[100,0],[200,150],[0,150],[100,0]])))?.shape,'triangle');assert.equal(recognizeShape(stroke(path([[0,0],[200,0],[160,-35],[200,0],[160,35]])))?.shape,'arrow');});
   it('leaves a complex scribble as handwriting',()=>{assert.equal(recognizeShape(stroke(path([[0,0],[100,50],[20,150],[170,20],[50,70],[200,140]]))),undefined);});
+});
+
+describe('cross-device pinch input',()=>{
+  for(const fps of [15,30,60,120]){
+    it('requires sustained contact and releases immediately at '+fps+' fps',()=>{
+      let state=initialEngineState();
+      const viewport={width:390,height:844};
+      let starts=0;
+      for(let i=0;i<Math.ceil(fps/4);i++){
+        const t=i*1000/fps;
+        const output=step({t,viewport,hands:[syntheticHand('pinch',.2)]},state,settings);
+        state=output.state;
+        if(t<24)assert.equal(state.pinching,false);
+        starts+=output.events.filter(event=>event.type==='begin').length;
+      }
+      assert.equal(starts,1);
+      const release=step({t:350,viewport,hands:[syntheticHand('open')]},state,settings);
+      assert.equal(release.events.filter(e=>e.type==='end').length,1);
+    });
+  }
+  it('requires release after rotating the viewport during a stroke',()=>{
+    let state=initialEngineState();
+    for(const t of [0,40,80])state=step({t,viewport:{width:390,height:844},hands:[syntheticHand('pinch',.2)]},state,settings).state;
+    assert.equal(state.mode,'ink');
+    const change=step({t:120,viewport:{width:844,height:390},hands:[syntheticHand('pinch',.2)]},state,settings);
+    assert.ok(change.events.some(event=>event.type==='end'));
+    const held=step({t:160,viewport:{width:844,height:390},hands:[syntheticHand('pinch',.2)]},change.state,settings);
+    assert.equal(held.state.mode,'hover');
+  });
 });

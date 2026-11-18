@@ -29,7 +29,7 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject) {
             ctx.stroke();
     }
     else if (o.kind === 'text') {
-        ctx.font = `${o.fontSize}px "Inter", sans-serif`;
+        ctx.font = `${o.italic ? "italic " : ""}${o.bold ? "bold " : ""}${o.fontSize}px "Inter", sans-serif`;
         o.text.split('\n').forEach((line, i) => ctx.fillText(line, o.x, o.y + i * o.fontSize * 1.4));
     }
     else {
@@ -86,13 +86,18 @@ else if (page.background !== 'blank') {
 } }
 export function renderPage(page: Page, width = BOARD_WIDTH) { const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = width * BOARD_HEIGHT / BOARD_WIDTH; const ctx = canvas.getContext('2d')!; ctx.scale(width / BOARD_WIDTH, width / BOARD_WIDTH); background(ctx, page); page.objects.forEach(o => drawObject(ctx, o)); return canvas; }
 export function bounds(o: BoardObject) { if (o.kind === 'stroke') {
-    const xs = o.points.map(p => p.x), ys = o.points.map(p => p.y);
-    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity;
+    for(const p of o.points){left=Math.min(left,p.x);top=Math.min(top,p.y);right=Math.max(right,p.x);bottom=Math.max(bottom,p.y);}
+    return o.points.length?{x:left,y:top,w:right-left,h:bottom-top}:{x:0,y:0,w:0,h:0};
 } if (o.kind === 'text')
     return { x: o.x, y: o.y - o.fontSize, w: Math.max(...o.text.split('\n').map(l => l.length)) * o.fontSize * .6, h: o.text.split('\n').length * o.fontSize * 1.4 }; return { x: Math.min(o.x, o.x + o.w), y: Math.min(o.y, o.y + o.h), w: Math.abs(o.w), h: Math.abs(o.h) }; }
 function segmentDistance(p: Point, a: Point, b: Point) { const dx = b.x - a.x, dy = b.y - a.y, t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy); }
 export function hitTest(o: BoardObject, p: Point, tolerance = 10) { const b = bounds(o); if (p.x < b.x - tolerance || p.x > b.x + b.w + tolerance || p.y < b.y - tolerance || p.y > b.y + b.h + tolerance)
-    return false; if (o.kind === 'stroke')
+    return false;
+    if(o.kind==='shape' && (o.shape==='line'||o.shape==='arrow')){
+      return segmentDistance(p,{x:o.x,y:o.y,t:0},{x:o.x+o.w,y:o.y+o.h,t:0})<=tolerance+o.width/2;
+    }
+    if (o.kind === 'stroke')
     return o.points.some((q, i) => segmentDistance(p, q, o.points[Math.max(0, i - 1)]) < tolerance + o.width / 2); return true; }
 export function moveObject(o: BoardObject, dx: number, dy: number): BoardObject { return o.kind === 'stroke' ? { ...o, points: o.points.map(p => ({ ...p, x: p.x + dx, y: p.y + dy })) } : { ...o, x: o.x + dx, y: o.y + dy, ...(o.kind==='shape'&&o.vertices?{vertices:o.vertices.map(p=>({x:p.x+dx,y:p.y+dy}))}:{}) }; }
 export function download(blob: Blob, name: string) { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }

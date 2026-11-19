@@ -75,7 +75,7 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
       if(selecting.current && !callbacks.current.locked && !pauseRef.current){
         const eligible=selecting.current==='draw'?hands:hands.filter(h=>h!==owned.draw);
         const palm=cyclePairing.current.observe(eligible,m.aspect,m.t);
-        if(palm){cyclePairing.current.reset();pair(palm);neutralRequired.current=!selecting.current;}
+        if(palm)pair(palm);
       }
       const active=owned.draw && !selecting.current?[owned.draw,...(owned.command?[owned.command]:[])]:[];
       tracker.region=selecting.current==='draw'?focusRegion.current:owned.draw && !selecting.current && !owner.current.hasCommand?presenterRegion(owned.draw,tracker.region):undefined;

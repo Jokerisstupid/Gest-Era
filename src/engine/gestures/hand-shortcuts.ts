@@ -1,4 +1,4 @@
-import { extractFeatures } from './features';
+import { angle, distance, extractFeatures } from './features';
 import { matchPalm, palmOf } from './presenter';
 import type { Features, Hand } from './types';
 
@@ -32,6 +32,23 @@ export class NumberPairing {
   }
 }
 
+// Pairing measures finger curl independently of the pen/pinch classifier.
+function cyclePose(hand:Hand,aspect:number){
+  const world=hand.worldLandmarks;
+  const points=world?.length===21 && world.every(p=>[p.x,p.y,p.z??0].every(Number.isFinite))
+    ?world:hand.landmarks.map(p=>({...p,y:p.y*aspect}));
+  if(points.length!==21)return '';
+  let folded=0, open=0;
+  for(const base of [5,9,13,17]){
+    const wrist=points[0],knuckle=points[base],tip=points[base+3];
+    const reach=distance(tip,wrist)/Math.max(.00001,distance(knuckle,wrist));
+    const bend=angle(knuckle,points[base+1],points[base+2]);
+    if(bend<125 && reach<1.55)folded++;
+    if(bend>140 && reach>1.42)open++;
+  }
+  return folded>=3?'FIST':open>=3?'OPEN_PALM':'';
+}
+
 export class HandCyclePairing {
   private palm?:Palm;
   private stable='';
@@ -47,20 +64,24 @@ export class HandCyclePairing {
   }
 
   observe(hands:Hand[],aspect:number,t:number){
+    if(!hands.length && this.palm && t-this.palm.t<=350){
+      this.pending='';
+      return;
+    }
     let hand=this.palm && matchPalm(this.palm,hands,aspect,t)?.hand;
-    if(!hand || t-this.started>6500){
+    if(!hand || t-this.started>10000){
       this.reset();
-      const fists=hands.filter(h=>extractFeatures(h,undefined,aspect)?.gesture==='FIST');
+      const fists=hands.filter(h=>cyclePose(h,aspect)==='FIST');
       if(fists.length!==1)return;
       hand=fists[0];
       this.started=t;
     }
     this.palm=palmOf(hand,aspect,t);
     if(!this.palm)return;
-    const pose=extractFeatures(hand,undefined,aspect)?.gesture;
+    const pose=cyclePose(hand,aspect);
     if(pose!=='FIST' && pose!=='OPEN_PALM'){this.pending='';return;}
     if(this.pending!==pose){this.pending=pose;this.since=t;return;}
-    if(t-this.since<90 || pose===this.stable)return;
+    if(t-this.since<30 || pose===this.stable)return;
     if(pose==='OPEN_PALM' && this.stable==='FIST')this.cycles++;
     this.stable=pose;
     if(this.cycles===3){const palm=this.palm;this.reset();return palm;}

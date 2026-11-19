@@ -235,6 +235,8 @@ describe('classroom hand shortcuts',()=>{
     let t=0;
     const hold=(pose:'fist'|'open')=>{
       const hand=syntheticHand(pose);
+      // Thumb stays extended even when the other fingers close.
+      hand.landmarks.splice(1,4,...syntheticHand('open').landmarks.slice(1,5));
       pairing.observe([hand],1,t);
       t+=100;
       const result=pairing.observe([hand],1,t);
@@ -243,6 +245,9 @@ describe('classroom hand shortcuts',()=>{
     };
     hold('fist');hold('open');hold('open');
     assert.equal(pairing.cycles,1);
+    pairing.observe([],1,t);
+    assert.equal(pairing.cycles,1);
+    t+=500;
     pairing.observe([],1,t);
     assert.equal(pairing.cycles,0);
     for(let i=0;i<2;i++){hold('fist');assert.equal(hold('open'),undefined);}

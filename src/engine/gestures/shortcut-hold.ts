@@ -26,3 +26,21 @@ export function shortcutPose(hand:Hand,features:Features,aspect:number,mirror:bo
   const direction=thumbDirection(hand,features,aspect,mirror);
   return direction===1?'next':direction===-1?'previous':'neutral';
 }
+
+export interface PageSwipe { x:number; y:number; since:number; fired:boolean }
+
+// Use the palm center so bending or extending a fingertip cannot turn a page.
+export function pageSwipeStep(previous:PageSwipe|undefined,hand:Hand,t:number,aspect:number,mirror:boolean){
+  const palm=[0,5,9,13,17].map(i=>hand.landmarks[i]);
+  const x=palm.reduce((sum,p)=>sum+p.x,0)/5;
+  const y=palm.reduce((sum,p)=>sum+p.y,0)*aspect/5;
+  const fresh={x,y,since:t,fired:false};
+  if(!previous)return {state:fresh};
+  if(previous.fired)return {state:previous};
+  const dx=(x-previous.x)*(mirror?-1:1),dy=Math.abs(y-previous.y);
+  const elapsed=t-previous.since;
+  if(elapsed>650 || dy>.10)return {state:fresh};
+  if(elapsed>=100 && Math.abs(dx)>=.14 && Math.abs(dx)>dy*2.2)
+    return {state:{...previous,fired:true},direction:dx>0?1 as const:-1 as const};
+  return {state:previous};
+}

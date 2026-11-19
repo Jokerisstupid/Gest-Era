@@ -1,6 +1,6 @@
 import { observePinch } from './pinch';
 import { clamp, cursorAnchor, extractFeatures } from './features';
-import {holdStep,shortcutPose} from './shortcut-hold';
+import {holdStep,pageSwipeStep,shortcutPose} from './shortcut-hold';
 import { paperAxis } from './reach';
 import { filter } from './filter';
 import { selectHands } from './identity';
@@ -29,6 +29,7 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
     state.mode='hover';
   };
   const reset=()=>{
+    state.pageSwipe=undefined;
     if(state.shortcut)state.shortcut=holdStep(state.shortcut,'missing',frame.t).state;
     state.pinching=false;state.closeFrames=0;state.closeSince=undefined;state.releaseFrames=0;
     state.heldThroughLoss=false;state.candidate=undefined;state.ring=[];
@@ -74,6 +75,15 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
     const reserved=context.paused || context.dialog || policy.waitingForPalm;
     const continuingContact=state.pinching && features.pinch<limits.exit && !policy.locked;
     const pose=reserved?'missing':continuingContact?'neutral':shortcutPose(hand,features,frame.aspect??1,settings.mirror,policy);
+    const canSwipe=!reserved && !policy.locked && !policy.editing && policy.thumbPages &&
+      frame.hands.length===1 && state.mode==='hover' && !state.pinching &&
+      features.extended.filter(Boolean).length>=3 && features.pinch>limits.exit;
+    const swipe=canSwipe?pageSwipeStep(state.pageSwipe,hand,frame.t,frame.aspect??1,settings.mirror):undefined;
+    state.pageSwipe=swipe?.state;
+    if(swipe?.direction){
+      events.push({type:'page',direction:swipe.direction});
+      return {state,events,gesture:'OPEN_PALM',status:'Changing page',activeHand:hand.side,commandReady:false};
+    }
     const held=holdStep(state.shortcut,pose,frame.t);
     if(policy.locked || policy.waitingForPalm || (pose!=='missing' && pose!=='neutral')){
       end('board shortcut',true);reset();state.armed=false;

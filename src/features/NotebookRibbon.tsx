@@ -73,7 +73,7 @@ export default function NotebookRibbon(props: Props) {
         <button data-gesture disabled={!props.canCopy} onClick={props.onDelete}>Delete selection</button>
         <button data-gesture onClick={props.onClear}>Clear page</button>
       </>}
-      {group === 'View' && <>{props.zoomControls}<button data-gesture aria-pressed={settings.thumbPages} onClick={()=>settings.update({thumbPages:!settings.thumbPages})}>Thumb page turns</button><button data-gesture onClick={props.onLock}>Lock board</button><button data-gesture aria-pressed={props.fingerPan} onClick={props.onFingerPan}>Finger pans</button><button data-gesture onClick={props.onGuide}>Gesture guide</button></>}
+      {group === 'View' && <>{props.zoomControls}<button data-gesture aria-pressed={settings.thumbPages} onClick={()=>settings.update({thumbPages:!settings.thumbPages})} title="Swipe an open hand right for next or left for previous. A sideways thumb hold also works.">Gesture page turns</button><button data-gesture onClick={props.onLock}>Lock board</button><button data-gesture aria-pressed={props.fingerPan} onClick={props.onFingerPan}>Finger pans</button><button data-gesture onClick={props.onGuide}>Gesture guide</button></>}
     </div>
   </section>;
 }

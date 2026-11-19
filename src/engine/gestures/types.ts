@@ -16,6 +16,7 @@ export interface Sample extends Point { ratio: number; }
 export interface Identity { wrist: Landmark; velocity: Landmark; t: number; side: string;otherWrist?:Landmark; }
 export interface CommandState { ready: number; wrist?: Landmark; lastT: number; fistSince?: number; fired: boolean; cooldown: number; swipe: {x:number;y:number;t:number}[];openSince?:number;armed?:boolean;actionSince?:number;action?:string; }
 export interface EngineState extends PinchState {
+  pageSwipe?:import('./shortcut-hold').PageSwipe;
   shortcut?:import('./shortcut-hold').ShortcutHold; presentation?:boolean;
   t: number; identity?: Identity; identityConfig?: string; features?: Features; commandFeatures?: Features;
   fx?: FilterState; fy?: FilterState; heldThroughLoss?:boolean;

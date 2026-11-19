@@ -365,3 +365,26 @@ it('ignores inference from a replaced camera stream without overlapping backend 
   await gate.run(async()=>3,n=>seen.push(n),assert.fail);
   assert.deepEqual(seen,[3]);
 });
+
+describe('single presenter page swipe',()=>{
+  function replay(mirror:boolean,locked=false,vertical=false){
+    let state=initialEngineState();
+    const turns=[];
+    for(let i=0;i<12;i++){
+      const shift=Math.min(i,6)*.03;
+      const hand=syntheticHand('open',undefined,vertical?0:shift);
+      if(vertical)hand.landmarks.forEach(p=>p.y+=shift);
+      const result=step({t:100+i*50,hands:[hand],pairedRoles:true},state,{...settings,mirror},
+        {shortcuts:{locked,waitingForPalm:false,thumbPages:true,editing:false}});
+      state=result.state;
+      turns.push(...result.events.filter(e=>e.type==='page').map(e=>e.direction));
+    }
+    return turns;
+  }
+  it('turns once in screen direction and ignores vertical or locked motion',()=>{
+    assert.deepEqual(replay(false),[1]);
+    assert.deepEqual(replay(true),[-1]);
+    assert.deepEqual(replay(false,true),[]);
+    assert.deepEqual(replay(false,false,true),[]);
+  });
+});

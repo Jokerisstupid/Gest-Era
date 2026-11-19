@@ -13,7 +13,11 @@ const tools = [
 import type { SelectionAction } from '../engine/selection';
 
 interface Props {
+  locked:boolean;
   onContents:()=>void;
+  onMedia:(pdf:boolean)=>void;
+  importing:string;
+  onLock:()=>void;
   onArrange:(action:SelectionAction)=>void;
   onNextColor:()=>void;
   fingerPan:boolean;
@@ -36,10 +40,10 @@ interface Props {
 }
 
 export default function NotebookRibbon(props: Props) {
-  const [group, setGroup] = useState<'Draw' | 'Edit' | 'View'>('Draw');
-  return <section className="notebook-ribbon" aria-label="Page tools">
+  const [group, setGroup] = useState<'Draw' | 'Insert' | 'Edit' | 'View'>('Draw');
+  return <section inert={props.locked} className="notebook-ribbon" aria-label="Page tools">
     <div className="ribbon-groups" role="group" aria-label="Tool groups">
-      {(['Draw', 'Edit', 'View'] as const).map(name =>
+      {(['Draw', 'Insert', 'Edit', 'View'] as const).map(name =>
         <button data-gesture key={name} aria-pressed={name === group} onClick={() => setGroup(name)}>{name}</button>)}
     </div>
     <div className="ribbon-controls" role="group" aria-label={group + ' controls'}>
@@ -47,6 +51,11 @@ export default function NotebookRibbon(props: Props) {
         {tools.map(([id, label, Icon]) => <button key={id} data-gesture aria-pressed={props.tool === id} onClick={() => props.onTool(id)}><Icon size={17}/>{label}</button>)}
         <button data-gesture onClick={props.onNextColor} title="Cycle through ink colors">Next color</button>
         <button data-gesture onClick={props.onProperties}><i style={{ backgroundColor: props.color }}/>Ink &amp; paper</button>
+      </>}
+      {group === 'Insert' && <>
+        <button disabled={!!props.importing} onClick={()=>props.onMedia(false)}>Picture</button>
+        <button disabled={!!props.importing} onClick={()=>props.onMedia(true)}>PDF slides</button>
+        <span role="status">{props.importing}</span>
       </>}
       {group === 'Edit' && <>
         <button data-gesture onClick={props.onContents}>Page contents</button>
@@ -61,7 +70,7 @@ export default function NotebookRibbon(props: Props) {
         <button data-gesture disabled={!props.canCopy} onClick={props.onDelete}>Delete selection</button>
         <button data-gesture onClick={props.onClear}>Clear page</button>
       </>}
-      {group === 'View' && <>{props.zoomControls}<button data-gesture aria-pressed={props.fingerPan} onClick={props.onFingerPan}>Finger pans</button><button data-gesture onClick={props.onGuide}>Gesture guide</button></>}
+      {group === 'View' && <>{props.zoomControls}<button data-gesture onClick={props.onLock}>Lock board</button><button data-gesture aria-pressed={props.fingerPan} onClick={props.onFingerPan}>Finger pans</button><button data-gesture onClick={props.onGuide}>Gesture guide</button></>}
     </div>
   </section>;
 }

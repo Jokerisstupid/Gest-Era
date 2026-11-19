@@ -1,6 +1,7 @@
 import type { BoardObject, Page, Point } from '../types';
+import {pageImages} from './board-media';
 export const BOARD_WIDTH = 1440, BOARD_HEIGHT = 900;
-export function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject) {
+export function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, images?:ReadonlyMap<string,HTMLImageElement>) {
     ctx.save();
     ctx.strokeStyle = o.color;
     ctx.fillStyle = o.color;
@@ -27,6 +28,10 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject) {
         }
         else
             ctx.stroke();
+    }
+    else if(o.kind==='picture'){
+        const image=images?.get(o.src);
+        if(image)ctx.drawImage(image,o.x,o.y,o.w,o.h);
     }
     else if (o.kind === 'text') {
         ctx.font = `${o.italic ? "italic " : ""}${o.bold ? "bold " : ""}${o.fontSize}px "Inter", sans-serif`;
@@ -84,7 +89,7 @@ else if (page.background !== 'blank') {
         }
     ctx.stroke();
 } }
-export function renderPage(page: Page, width = BOARD_WIDTH) { const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = width * BOARD_HEIGHT / BOARD_WIDTH; const ctx = canvas.getContext('2d')!; ctx.scale(width / BOARD_WIDTH, width / BOARD_WIDTH); background(ctx, page); page.objects.forEach(o => drawObject(ctx, o)); return canvas; }
+export async function renderPage(page: Page, width = BOARD_WIDTH) { const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = width * BOARD_HEIGHT / BOARD_WIDTH; const ctx = canvas.getContext('2d')!; ctx.scale(width / BOARD_WIDTH, width / BOARD_WIDTH); background(ctx, page); const images=await pageImages(page.objects); page.objects.forEach(o => drawObject(ctx, o,images)); return canvas; }
 export function bounds(o: BoardObject) { if (o.kind === 'stroke') {
     let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity;
     for(const p of o.points){left=Math.min(left,p.x);top=Math.min(top,p.y);right=Math.max(right,p.x);bottom=Math.max(bottom,p.y);}
@@ -101,6 +106,6 @@ export function hitTest(o: BoardObject, p: Point, tolerance = 10) { const b = bo
     return o.points.some((q, i) => segmentDistance(p, q, o.points[Math.max(0, i - 1)]) < tolerance + o.width / 2); return true; }
 export function moveObject(o: BoardObject, dx: number, dy: number): BoardObject { return o.kind === 'stroke' ? { ...o, points: o.points.map(p => ({ ...p, x: p.x + dx, y: p.y + dy })) } : { ...o, x: o.x + dx, y: o.y + dy, ...(o.kind==='shape'&&o.vertices?{vertices:o.vertices.map(p=>({x:p.x+dx,y:p.y+dy}))}:{}) }; }
 export function download(blob: Blob, name: string) { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-export async function exportPNG(page: Page, name: string) { const canvas = renderPage(page); const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(Error('Image export failed.')))); download(blob, `${name}.png`); }
-export async function exportPDF(pages: Page[], name: string) { const { jsPDF } = await import('jspdf'); const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [BOARD_WIDTH, BOARD_HEIGHT] }); pages.forEach((p, i) => { if (i)
-    pdf.addPage([BOARD_WIDTH, BOARD_HEIGHT], 'landscape'); pdf.addImage(renderPage(p).toDataURL('image/png'), 'PNG', 0, 0, BOARD_WIDTH, BOARD_HEIGHT); }); pdf.save(`${name}.pdf`); }
+export async function exportPNG(page: Page, name: string) { const canvas = await renderPage(page); const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(Error('Image export failed.')))); download(blob, `${name}.png`); }
+export async function exportPDF(pages: Page[], name: string) { const { jsPDF } = await import('jspdf'); const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [BOARD_WIDTH, BOARD_HEIGHT] }); for(const [i,p] of pages.entries()){ if (i)
+    pdf.addPage([BOARD_WIDTH, BOARD_HEIGHT], 'landscape'); pdf.addImage((await renderPage(p)).toDataURL('image/png'), 'PNG', 0, 0, BOARD_WIDTH, BOARD_HEIGHT); } pdf.save(`${name}.pdf`); }

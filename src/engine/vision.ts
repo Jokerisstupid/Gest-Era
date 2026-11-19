@@ -1,5 +1,6 @@
 import type { Hand } from './gestures/types';
 import { createVisionBackend, type VisionBackend } from './vision-backend';
+import { fullFrameHand, type CameraRegion } from './gesture-crop';
 import { FrameGate } from './frameGate';
 import { acquireCamera } from './camera-request';
 import { watchCameraFrames } from './camera-frames';
@@ -26,6 +27,7 @@ function frameRate(samples:number[], t:number) {
 }
 
 export class CameraTracker {
+  region?:CameraRegion;
   private stream?:MediaStream;
   private backend?:VisionBackend;
   private gate=new FrameGate();
@@ -96,6 +98,8 @@ export class CameraTracker {
   }
 
   private trackFrames(track:MediaStreamTrack, compatible:boolean, mobileCapture:boolean, deviceId?:string) {
+    this.region=undefined;
+    const cropped=document.createElement('canvas'), cropContext=cropped.getContext('2d');
     const captured:number[]=[], processed:number[]=[];
     const sample=document.createElement('canvas');
     sample.width=16;
@@ -132,7 +136,16 @@ export class CameraTracker {
         }
         const backend=this.backend!;
         const start=performance.now();
-        const result=await deadline(backend.infer(this.video,t),4500,'Hand tracking stopped responding.');
+        const region=cropContext?this.region:undefined;
+        if(region && cropContext){
+          const w=this.video.videoWidth,h=this.video.videoHeight;
+          const target=Math.min(1,640/Math.max(w*region.size,h*region.size));
+          const cw=Math.max(1,Math.round(w*region.size*target)),ch=Math.max(1,Math.round(h*region.size*target));
+          if(cropped.width!==cw || cropped.height!==ch){cropped.width=cw;cropped.height=ch;}
+          cropContext.drawImage(this.video,w*region.x,h*region.y,w*region.size,h*region.size,0,0,cw,ch);
+        }
+        const result=await deadline(backend.infer(region?cropped:this.video,t),4500,'Hand tracking stopped responding.');
+        if(region)result.hands=result.hands.map(hand=>fullFrameHand(hand,region));
         return {...result,backend:backend.mode,pipeline:performance.now()-start};
       },result=>{
         this.onFrame(result.hands,{t,fps:frameRate(processed,t),captureFPS,inference:result.inference,

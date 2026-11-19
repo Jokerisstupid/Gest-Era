@@ -14,7 +14,7 @@ function TemplateArt({ id }: {
 function BoardPreview({ project }: {
     project: Project;
 }) { const ref = useRef<HTMLCanvasElement>(null); useEffect(() => { const el = ref.current; if (!el)
-    return; const rendered = renderPage(project.pages[0], 600); el.width = rendered.width; el.height = rendered.height; el.getContext('2d')?.drawImage(rendered, 0, 0); }, [project]); return <canvas ref={ref} aria-label={`${project.name} preview`}/>; }
+    return; let active=true;void renderPage(project.pages[0],600).then(rendered=>{if(active){el.width=rendered.width;el.height=rendered.height;el.getContext('2d')?.drawImage(rendered,0,0);}}).catch(()=>{});return ()=>{active=false;}; }, [project]); return <canvas ref={ref} aria-label={`${project.name} preview`}/>; }
 export default function Dashboard() {
     const [projects, setProjects] = useState<Project[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState(''), [query, setQuery] = useState(''), [sort, setSort] = useState<'recent' | 'name'>('recent'), [layout, setLayout] = useState<'grid' | 'list'>('grid'), [menu, setMenu] = useState<string | null>(null), [rename, setRename] = useState<Project | null>(null), [name, setName] = useState(''), [deleting, setDeleting] = useState<Project | null>(null), [busy, setBusy] = useState(false);
     const navigate = useNavigate(), location = useLocation(), toast = useToast(), { openGuide } = useOutletContext<{

@@ -9,6 +9,9 @@ import { uid, type Background, type BoardObject, type Point, type Project, type 
 import { Confirm, GestureGuide, Logo, useToast } from '../ui/common';
 import CameraPanel, { type HandInput } from './CameraPanel';
 import { eraseSweep } from '../engine/erase';
+import {importPdf,importPicture,pageImages} from '../engine/board-media';
+import {inkPoints} from '../engine/gestures/dot';
+import {newPage} from '../types';
 import { transformViewport } from '../engine/gestures/transform';
 import { useSettings } from '../store/settings';
 import { recognizeShape } from '../engine/gestures/snap';
@@ -40,6 +43,13 @@ function BoardEditor({ initial }: {
     });
     const [pageIndex, setPageIndex] = useState(firstPage), pageRef = useRef(firstPage), [tool, setTool] = useState<Tool>('pen'), [shape, setShape] = useState<ShapeObject['shape']>('rectangle'), [selected, setSelected] = useState<string[]>([]), [camera, setCamera] = useState(false), [handStatus, setHandStatus] = useState('Mouse & touch ready'), [guide, setGuide] = useState(false), [ai, setAI] = useState(false), [pagesOpen, setPagesOpen] = useState(()=>window.innerWidth>=1100), [exportOpen, setExportOpen] = useState(false), [properties, setProperties] = useState(false), [presenting, setPresenting] = useState(false), [confirm, setConfirm] = useState<'clear' | 'page' | null>(null), [textInput, setTextInput] = useState<TextObject | null>(null), [size, setSize] = useState({ w: 1000, h: 700 }), [zoom, setZoom] = useState(1), [pan, setPan] = useState({ x: 0, y: 0 });
     const {color,width,setColor,setWidth}=useInkPreset(tool);
+    const [locked,setLocked]=useState(false),lockRef=useRef(false);
+    const toggleLock=()=>{finishRef.current();lockRef.current=!lockRef.current;setLocked(lockRef.current);};
+    const mediaPicker=useRef<HTMLInputElement>(null),job=useRef<AbortController|null>(null);
+    const [importing,setImporting]=useState('');
+    useEffect(()=>()=>job.current?.abort(),[]);
+    const images=useRef(new Map<string,HTMLImageElement>());
+    const contact=useRef<Point|undefined>(undefined);
     const [contents,setContents]=useState(false);
     const [clipboard, setClipboard] = useState<BoardObject[]>([]);
     const [sectionView,setSectionView]=useState(initial.pages[firstPage]?.sectionId);
@@ -101,9 +111,9 @@ function BoardEditor({ initial }: {
             ctx.fillStyle='#487aff22';ctx.fill();ctx.strokeStyle='#376bd1';ctx.lineWidth=1.5/viewport.current.scale;
             ctx.setLineDash([5/viewport.current.scale,4/viewport.current.scale]);ctx.stroke();ctx.setLineDash([]);
         }
-        active?.moved?.forEach(object=>drawObject(ctx,object));
+        active?.moved?.forEach(object=>drawObject(ctx,object,images.current));
         if (liveObject.current)
-        drawObject(ctx, snapPreview.current ?? liveObject.current); }, [prepare]);
+        drawObject(ctx, snapPreview.current ?? liveObject.current,images.current); }, [prepare]);
     const drawOverlay = useCallback((cursor?: Point) => { const ctx = prepare(overlay.current); if (!ctx)
         return; const page = projectRef.current.pages[pageRef.current]; const objects=drag.current?.moved??page.objects.filter(o=>selectedRef.current.includes(o.id)); for (const object of objects) {
         const b = bounds(object);
@@ -121,8 +131,17 @@ function BoardEditor({ initial }: {
     } }, [prepare]);
     const redrawPage=useCallback(() => { const ctx = prepare(committed.current); if (!ctx)
         return; ctx.shadowColor = '#00000025'; ctx.shadowBlur = 24; ctx.shadowOffsetY = 7; ctx.fillStyle = '#f7f8fc'; ctx.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT); ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; ctx.save(); ctx.beginPath(); ctx.rect(0, 0, BOARD_WIDTH, BOARD_HEIGHT); ctx.clip(); background(ctx, project.pages[pageIndex]); const moving=new Set(drag.current?.moved?.map(o=>o.id));
-        project.pages[pageIndex].objects.forEach(o=>{if(!moving.has(o.id))drawObject(ctx,o);});ctx.restore();
+        project.pages[pageIndex].objects.forEach(o=>{if(!moving.has(o.id))drawObject(ctx,o,images.current);});ctx.restore();
     },[project.pages,pageIndex,prepare]);
+    const visibleObjects=project.pages[pageIndex].objects;
+    useEffect(()=>{
+      let active=true;
+      if(!visibleObjects.some(o=>o.kind==='picture')){images.current.clear();return;}
+      void pageImages(visibleObjects,images.current).then(loaded=>{
+        if(active){images.current=loaded;redrawPage();}
+      }).catch(()=>{if(active)toast('A picture could not be displayed.');});
+      return ()=>{active=false;};
+    },[visibleObjects,redrawPage,toast]);
     useEffect(()=>{redrawPage();redrawLive();drawOverlay();},[redrawPage,redrawLive,drawOverlay,zoom,pan]);
     useEffect(()=>{drawOverlay();},[selected,drawOverlay]);
     const frame=useRef<number | null>(null), latestCursor=useRef<Point | undefined>(undefined);
@@ -135,7 +154,9 @@ function BoardEditor({ initial }: {
     },[redrawLive,drawOverlay]);
     useEffect(()=>()=>{if(frame.current!==null)cancelAnimationFrame(frame.current);frame.current=null;},[paintInput]);
     const finish = useCallback((trimAfter?:number) => { const d = drag.current; if (!d)
-        return; if(frame.current!==null){cancelAnimationFrame(frame.current);frame.current=null;}clearTimeout(snapTimer.current);drag.current = null; const raw = liveObject.current; if(raw?.kind==='stroke' && trimAfter!==undefined)raw.points=raw.points.filter(p=>p.t<=trimAfter); const o=snapPreview.current??raw; snapPreview.current=null; liveObject.current = null;
+        return; if(frame.current!==null){cancelAnimationFrame(frame.current);frame.current=null;}clearTimeout(snapTimer.current);drag.current = null; const raw = liveObject.current; if(raw?.kind==='stroke' && trimAfter!==undefined)raw.points=raw.points.filter(p=>p.t<=trimAfter); if(raw?.kind==='stroke' && raw.tool==='pen' && d.source==='hand' && contact.current && raw.points.length)
+            raw.points=inkPoints(raw.points,contact.current,viewport.current.scale);
+        contact.current=undefined;const o=snapPreview.current??raw; snapPreview.current=null; liveObject.current = null;
         if(d.lasso){
             const ids=lassoSelection(projectRef.current.pages[pageRef.current].objects,d.lasso);
             setSelected(ids);if(ids.length)setTool('select');
@@ -243,11 +264,19 @@ function BoardEditor({ initial }: {
         paintInput(point);
     }, [finish, drawOverlay, redrawLive,redrawPage,paintInput,publish,history,projectRef]);
     const screenToWorld=(p:Point):Point=>{const r=host.current!.getBoundingClientRect(),v=viewport.current;return{...p,x:(p.x*window.innerWidth-r.left-v.tx)/v.scale,y:(p.y*window.innerHeight-r.top-v.ty)/v.scale};};
+    const paperArea=()=>{
+      const box=host.current?.getBoundingClientRect();
+      if(!box)return;
+      // Use the sheet at fit zoom so panning and zooming never move the input map itself.
+      const fit=scale/zoom,w=BOARD_WIDTH*fit,h=BOARD_HEIGHT*fit;
+      const left=box.left+(box.width-w)/2,top=box.top+(box.height-h)/2;
+      return {left:left/window.innerWidth,right:(left+w)/window.innerWidth,top:top/window.innerHeight,bottom:(top+h)/window.innerHeight};
+    };
     const boardContains=(x:number,y:number)=>{if(!host.current||document.elementFromPoint(x,y)!==overlay.current)return false;const p=screenToWorld({x:x/window.innerWidth,y:y/window.innerHeight,t:0});return p.x>=0&&p.x<=BOARD_WIDTH&&p.y>=0&&p.y<=BOARD_HEIGHT;};
     const handInput=(event:HandInput)=>{
       if(event.type==='end'){if(drag.current?.source==='hand')finish(event.trimAfter);return;}
-      if(drag.current?.source==='pointer')return;
-      if(event.type==='begin'){const pts=event.points.map(screenToWorld);input('down',pts[0],'hand',event.erase);pts.slice(1).forEach(p=>input('move',p,'hand',event.erase));return;}
+      if(lockRef.current||drag.current?.source==='pointer')return;
+      if(event.type==='begin'){const pts=event.points.map(screenToWorld);input('down',pts[0],'hand',event.erase);contact.current=pts.at(-1);pts.slice(1).forEach(p=>input('move',p,'hand',event.erase));return;}
       if(event.type==='point'){input('move',screenToWorld(event.point),'hand',event.erase);return;}
       if(event.type==='undo'){finish();undo();return;}
       if(event.type==='redo'){finish();redo();return;}
@@ -285,7 +314,7 @@ function BoardEditor({ initial }: {
     useEffect(()=>{
         const canvas=overlay.current;if(!canvas)return;
         const wheel=(event:WheelEvent)=>{
-            if(!event.ctrlKey && !event.metaKey)return;
+            if(lockRef.current||(!event.ctrlKey && !event.metaKey))return;
             event.preventDefault();finishRef.current();
             const unit=event.deltaMode===1?16:event.deltaMode===2?canvas.clientHeight:1;
             wheelZoom.current(Math.exp(-Math.max(-100,Math.min(100,event.deltaY*unit))*.012),{x:event.clientX,y:event.clientY});
@@ -313,7 +342,7 @@ function BoardEditor({ initial }: {
     },[finish,projectRef]);
     const cutSelection=useCallback(()=>{copySelection();deleteSelection();},[copySelection,deleteSelection]);
     const hasVisiblePage=project.pages.some(p=>p.sectionId===sectionView);
-    useEffect(() => { const fn = (e: KeyboardEvent) => { if (document.querySelector('dialog[open]') || (e.target as HTMLElement).matches('input,textarea,select,[contenteditable]'))
+    useEffect(() => { const fn = (e: KeyboardEvent) => { if (lockRef.current || document.querySelector('dialog[open]') || (e.target as HTMLElement).matches('input,textarea,select,[contenteditable]'))
         return; if(!hasVisiblePage)return;
         if(e.target===overlay.current && !presenting && !e.ctrlKey && !e.metaKey && !e.altKey){
             if(e.key==='Enter'){e.preventDefault();finish();setContents(true);return;}
@@ -377,10 +406,37 @@ function BoardEditor({ initial }: {
     catch {
         toast('Export failed. Please try again.');
     } };
+    const chooseMedia=(pdf:boolean)=>{
+      const picker=mediaPicker.current;
+      if(!picker||job.current)return;
+      picker.accept=pdf?'application/pdf,.pdf':'image/png,image/jpeg,image/webp,image/gif';picker.value='';picker.click();
+    };
+    const insertMedia=async(file:File)=>{
+      if(job.current||lockRef.current)return;
+      finish();
+      const targetId=projectRef.current.pages[pageRef.current].id,controller=new AbortController();
+      job.current=controller;setImporting('Reading '+file.name);
+      try{
+        const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
+        const pictures=pdf?await importPdf(file,100-projectRef.current.pages.length,(n,total)=>setImporting('Preparing slide '+n+' of '+total),controller.signal):[await importPicture(file)];
+        if(controller.signal.aborted)return;
+        const doc=projectRef.current,index=doc.pages.findIndex(p=>p.id===targetId);
+        if(index<0||lockRef.current)throw Error('Import cancelled because the destination page changed or was locked.');
+        if(pdf && doc.pages.length+pictures.length>100)throw Error('This notebook has reached its page limit.');
+        finish();
+        const pages=[...projectRef.current.pages],target=pages[index];
+        if(pdf)pages.splice(index+1,0,...pictures.map(pic=>({...newPage('blank',target.sectionId,pic.name),objects:[pic]})));
+        else pages[index]={...target,objects:[...target.objects,...pictures]};
+        update(pages);switchPage(pdf?index+1:index);
+        if(!pdf){setTool('select');setSelected([pictures[0].id]);}
+        toast(pdf?pictures.length+' slides added.':'Picture inserted.');
+      }catch(error){if(!controller.signal.aborted)toast(error instanceof Error?error.message:'The file could not be imported.');}
+      finally{if(!controller.signal.aborted)setImporting('');job.current=null;}
+    };
     const selectedPage = project.pages[pageIndex];
     useEffect(()=>{try{localStorage.setItem('gestera:page:'+project.id,selectedPage.id);}catch{}},[project.id,selectedPage.id]);
     const viewedSection=sectionsOf(project).find(s=>s.id===sectionView)??sectionsOf(project).find(s=>s.id===selectedPage.sectionId)!,emptySection=!project.pages.some(p=>p.sectionId===viewedSection.id);
-    return <div className={`board-app ${presenting ? 'is-presenting' : ''} ${camera ? 'gesture-mode' : ''}`}><header className="board-topbar"><Link to="/app" data-gesture aria-label="Back to workspace" className="board-brand"><Logo small/></Link><span className="bar-separator"/><div className="board-title-group"><input aria-label="Notebook title" value={project.name} maxLength={150} onChange={e=>publish({...projectRef.current,name:e.target.value})} onBlur={()=>{if(!projectRef.current.name.trim())publish({...projectRef.current,name:'Untitled notebook'});}}/><span className={saveState.includes('failed') ? 'save-warning' : ''}>{saveState === 'Saved locally' ? <Check size={11}/> : <Circle size={9}/>} {saveState}</span></div><div className="board-top-actions"><button data-gesture aria-label="Previous page" className="btn secondary small-btn" disabled={pageIndex===0} onClick={()=>switchPage(pageIndex-1)}><ArrowLeft size={17}/></button><button data-gesture aria-label="Next page" className="btn secondary small-btn" disabled={pageIndex===project.pages.length-1} onClick={()=>switchPage(pageIndex+1)}><ArrowRight size={17}/></button><button data-gesture aria-label="Notebook navigation" className={`btn secondary small-btn ${pagesOpen ? 'active' : ''}`} onClick={() => setPagesOpen(x => !x)}><Layers2 size={15}/><span>{pageIndex + 1} / {project.pages.length}</span></button><button data-gesture aria-label="Present notebook" disabled={emptySection} className="btn secondary small-btn present-btn" onClick={() => { finish(); setPresenting(true); setTool('laser'); void document.documentElement.requestFullscreen?.().catch(() => { }); }}><Presentation size={15}/><span>Present</span></button><div className="export-wrap"><button data-gesture className="btn secondary small-btn" aria-label="Export notebook" disabled={emptySection} onClick={() => setExportOpen(x => !x)}><Download size={15}/><span>Export</span><ChevronDown size={12}/></button>{exportOpen && <><button data-gesture className="menu-scrim" aria-label="Close export menu" onClick={() => setExportOpen(false)}/><div className="dropdown"><button data-gesture onClick={() => exportBoard('png')}>PNG · current page</button><button data-gesture onClick={() => exportBoard('pdf')}>PDF · all pages</button><button data-gesture onClick={() => exportBoard('json')}>GestEra · editable backup</button></div></>}</div><button data-gesture className="btn primary small-btn ai-button" onClick={() => setAI(x => !x)}><Sparkles size={15}/><span>Board assistant</span></button></div></header>{!presenting&&<div className="page-context"><span>{viewedSection.name}</span><span>/</span><h1>{emptySection?'No pages yet':selectedPage.title??'Untitled page'}</h1><button data-gesture onClick={()=>setPagesOpen(true)}>Organize pages</button></div>}{!presenting&&!emptySection&&<NotebookRibbon tool={tool} color={color} onTool={next=>{finish();setTool(next);if(next==='shape')setProperties(true);}} onProperties={()=>{finish();setProperties(true);}}
+    return <div className={`board-app ${presenting ? 'is-presenting' : ''} ${camera ? 'gesture-mode' : ''}`}><header className="board-topbar" inert={locked}><Link to="/app" data-gesture aria-label="Back to workspace" className="board-brand"><Logo small/></Link><span className="bar-separator"/><div className="board-title-group"><input aria-label="Notebook title" value={project.name} maxLength={150} onChange={e=>publish({...projectRef.current,name:e.target.value})} onBlur={()=>{if(!projectRef.current.name.trim())publish({...projectRef.current,name:'Untitled notebook'});}}/><span className={saveState.includes('failed') ? 'save-warning' : ''}>{saveState === 'Saved locally' ? <Check size={11}/> : <Circle size={9}/>} {saveState}</span></div><div className="board-top-actions"><button data-gesture aria-label="Previous page" className="btn secondary small-btn" disabled={pageIndex===0} onClick={()=>switchPage(pageIndex-1)}><ArrowLeft size={17}/></button><button data-gesture aria-label="Next page" className="btn secondary small-btn" disabled={pageIndex===project.pages.length-1} onClick={()=>switchPage(pageIndex+1)}><ArrowRight size={17}/></button><button data-gesture aria-label="Notebook navigation" className={`btn secondary small-btn ${pagesOpen ? 'active' : ''}`} onClick={() => setPagesOpen(x => !x)}><Layers2 size={15}/><span>{pageIndex + 1} / {project.pages.length}</span></button><button data-gesture aria-label="Present notebook" disabled={emptySection} className="btn secondary small-btn present-btn" onClick={() => { finish(); setPresenting(true); setTool('laser'); void document.documentElement.requestFullscreen?.().catch(() => { }); }}><Presentation size={15}/><span>Present</span></button><div className="export-wrap"><button data-gesture className="btn secondary small-btn" aria-label="Export notebook" disabled={emptySection} onClick={() => setExportOpen(x => !x)}><Download size={15}/><span>Export</span><ChevronDown size={12}/></button>{exportOpen && <><button data-gesture className="menu-scrim" aria-label="Close export menu" onClick={() => setExportOpen(false)}/><div className="dropdown"><button data-gesture onClick={() => exportBoard('png')}>PNG · current page</button><button data-gesture onClick={() => exportBoard('pdf')}>PDF · all pages</button><button data-gesture onClick={() => exportBoard('json')}>GestEra · editable backup</button></div></>}</div><button data-gesture className="btn primary small-btn ai-button" onClick={() => setAI(x => !x)}><Sparkles size={15}/><span>Board assistant</span></button></div></header>{!presenting&&<div inert={locked} className="page-context"><span>{viewedSection.name}</span><span>/</span><h1>{emptySection?'No pages yet':selectedPage.title??'Untitled page'}</h1><button data-gesture onClick={()=>setPagesOpen(true)}>Organize pages</button></div>}{!presenting&&!emptySection&&<NotebookRibbon locked={locked} onMedia={chooseMedia} importing={importing} onLock={toggleLock} tool={tool} color={color} onTool={next=>{finish();setTool(next);if(next==='shape')setProperties(true);}} onProperties={()=>{finish();setProperties(true);}}
       canCopy={selected.length>0} canPaste={clipboard.length>0}
       onArrange={action=>{finish();const objects=projectRef.current.pages[pageRef.current].objects;
         const next=arrangeSelection(objects,selectedRef.current,action);if(next!==objects)updatePage(next);}}
@@ -393,10 +449,12 @@ function BoardEditor({ initial }: {
       onClear={()=>setConfirm('clear')} onGuide={()=>setGuide(true)} zoomControls={<div className="ribbon-zoom"><button data-gesture aria-label="Zoom out" onClick={() => setZoom(z => Math.max(.4, z - .2))}><Minus size={16}/></button><span>{Math.round(zoom * 100)}%</span><button data-gesture aria-label="Zoom in" onClick={() => setZoom(z => Math.min(3, z + .2))}><Plus size={16}/></button><i /><button data-gesture aria-label="Fit board to screen" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}><Maximize size={15}/></button></div>}/>}
       {properties&&<InkProperties group={tool==='shape'?'Shapes':tool==='eraser'?'Eraser':'Ink'} color={color} width={width} shape={shape} paper={selectedPage.background}
         onColor={setColor} onWidth={setWidth} onShape={v=>{setShape(v);setTool('shape');}} onPaper={(background:Background)=>{const pages=[...projectRef.current.pages];pages[pageRef.current]={...pages[pageRef.current],background};update(pages);}} onClose={()=>setProperties(false)}/>}
-      <div className="board-body">{pagesOpen&&!presenting&&<><button className="notebook-nav-scrim" aria-label="Close notebook navigation" onClick={()=>setPagesOpen(false)}/><NotebookExplorer sectionId={viewedSection.id} onBrowse={id=>{const p=projectRef.current,index=p.pages.findIndex(page=>page.sectionId===id);if(index>=0)switchPage(index);else{finish();setSelected([]);setSectionView(id);}}} project={project} activePageId={selectedPage.id} onClose={()=>setPagesOpen(false)} onSelect={id=>{const i=projectRef.current.pages.findIndex(p=>p.id===id);if(i>=0)switchPage(i);if(window.innerWidth<1100)setPagesOpen(false);}} onChange={next=>{const active=projectRef.current.pages[pageRef.current]?.id,before=projectRef.current;finish();const latest=projectRef.current;const pages=next.pages.map(page=>{const old=before.pages.find(p=>p.id===page.id),current=latest.pages.find(p=>p.id===page.id);return old&&current&&page.objects===old.objects?{...page,objects:current.objects}:page;});update(pages,true,next.sections);const index=pages.findIndex(p=>p.id===active);setSectionView(pages[index>=0?index:Math.min(pageRef.current,pages.length-1)].sectionId);setPageIndex(index>=0?index:Math.min(pageRef.current,pages.length-1));setSelected([]);}}/></>}<div className="canvas-host" ref={host}>{emptySection&&!presenting&&<div className="empty-section-canvas"><Layers2 size={35}/><h2>A fresh section</h2><p>Add a page to start writing in {viewedSection.name}.</p><button data-gesture className="btn secondary" onClick={()=>setPagesOpen(true)}>Open pages</button><button data-gesture className="subtle" disabled={!history.current.canUndo} onClick={undo}>Undo last change</button></div>}<div className="canvas-content" inert={emptySection}><canvas ref={committed} className="canvas-layer"/><canvas ref={live} className="canvas-layer live-layer"/><canvas ref={overlay} className={`canvas-layer input-layer tool-${tool}`} aria-label="Drawing area. Press Enter for page contents. Use arrow keys to move selected items, or Shift and arrow keys for larger steps." tabIndex={0} {...pointerHandlers} onPointerLeave={() => { if (!drag.current)
+      <input type="file" hidden ref={mediaPicker} onChange={e=>{const file=e.target.files?.[0];if(file)void insertMedia(file);}}/>
+      {locked&&<div className="board-lock-banner" role="region" aria-label="Board locked"><strong>Board locked</strong><button autoFocus onClick={toggleLock}>Unlock board</button></div>}
+      <div inert={locked} className="board-body">{pagesOpen&&!presenting&&<><button className="notebook-nav-scrim" aria-label="Close notebook navigation" onClick={()=>setPagesOpen(false)}/><NotebookExplorer sectionId={viewedSection.id} onBrowse={id=>{const p=projectRef.current,index=p.pages.findIndex(page=>page.sectionId===id);if(index>=0)switchPage(index);else{finish();setSelected([]);setSectionView(id);}}} project={project} activePageId={selectedPage.id} onClose={()=>setPagesOpen(false)} onSelect={id=>{const i=projectRef.current.pages.findIndex(p=>p.id===id);if(i>=0)switchPage(i);if(window.innerWidth<1100)setPagesOpen(false);}} onChange={next=>{const active=projectRef.current.pages[pageRef.current]?.id,before=projectRef.current;finish();const latest=projectRef.current;const pages=next.pages.map(page=>{const old=before.pages.find(p=>p.id===page.id),current=latest.pages.find(p=>p.id===page.id);return old&&current&&page.objects===old.objects?{...page,objects:current.objects}:page;});update(pages,true,next.sections);const index=pages.findIndex(p=>p.id===active);setSectionView(pages[index>=0?index:Math.min(pageRef.current,pages.length-1)].sectionId);setPageIndex(index>=0?index:Math.min(pageRef.current,pages.length-1));setSelected([]);}}/></>}<div className="canvas-host" ref={host}>{emptySection&&!presenting&&<div className="empty-section-canvas"><Layers2 size={35}/><h2>A fresh section</h2><p>Add a page to start writing in {viewedSection.name}.</p><button data-gesture className="btn secondary" onClick={()=>setPagesOpen(true)}>Open pages</button><button data-gesture className="subtle" disabled={!history.current.canUndo} onClick={undo}>Undo last change</button></div>}<div className="canvas-content" inert={emptySection}><canvas ref={committed} className="canvas-layer"/><canvas ref={live} className="canvas-layer live-layer"/><canvas ref={overlay} className={`canvas-layer input-layer tool-${tool}`} aria-label="Drawing area. Press Enter for page contents. Use arrow keys to move selected items, or Shift and arrow keys for larger steps." tabIndex={0} {...pointerHandlers} onPointerLeave={() => { if (!drag.current)
         drawOverlay(); }}/>
-  {!presenting && <><div className="board-undo"><button data-gesture aria-label="Undo" title="Undo (Ctrl Z)" disabled={!history.current.canUndo} onClick={undo}><Undo2 size={18}/></button><button data-gesture aria-label="Redo" title="Redo (Ctrl Shift Z)" disabled={!history.current.canRedo} onClick={redo}><Redo2 size={18}/></button></div><div className="gesture-hud"><span className={camera ? 'status-dot' : 'inactive-dot'}/><span>{camera ? handStatus : 'Mouse, touch & pen ready'}</span><i /><button data-gesture className={camera ? 'camera-on' : ''} onClick={() => setCamera(x => !x)}><Video size={15}/>{camera ? 'Stop camera' : 'Start air writing'}</button><button data-gesture aria-label="Gesture help" onClick={() => setGuide(true)}>?</button></div>{selectedPage.objects.length === 0 && <div className="canvas-empty"><span>{camera?'Pinch to draw':'Draw or type anywhere on the page'}</span><small>{camera?'Release to lift the pen.':'Choose Text to add or edit a note.'}</small></div>}</>}{presenting && <div className="presentation-controls"><button data-gesture aria-label="Previous slide" disabled={pageIndex === 0} onClick={() => switchPage(pageIndex - 1)}><ArrowLeft size={18}/></button><span>{pageIndex + 1} / {project.pages.length}</span><button data-gesture aria-label="Next slide" disabled={pageIndex === project.pages.length - 1} onClick={() => switchPage(pageIndex + 1)}><ArrowRight size={18}/></button><button data-gesture onClick={() => { setPresenting(false); setTool('pen'); if (document.fullscreenElement)
-        void document.exitFullscreen(); }}><X size={16}/>Exit presentation</button></div>}</div></div>{ai && !presenting && <aside className="ai-panel"><div className="panel-heading"><h3><Sparkles size={18}/>Board assistant</h3><button data-gesture aria-label="Close assistant" onClick={() => setAI(false)}><X size={17}/></button></div><div className="ai-setup-icon"><Sparkles size={30}/></div><h2>A little intelligence.<br />A lot of possibility.</h2><p>Transcribe handwriting, explain a diagram, or create a study quiz from a snapshot you choose.</p><div className="setup-state"><span className="status-dot warning"/><strong>Server setup required</strong><p>AI is not connected in this core release. Add a server-side Gemini integration before sending board snapshots. Camera frames are never sent.</p></div><Link className="btn secondary" to="/settings"><Settings2 size={15}/>View project setup</Link><button data-gesture className="subtle" onClick={() => { download(new Blob([JSON.stringify(projectRef.current)], { type: 'application/json' }), `${project.name}.gestera`); toast('Editable board backup exported.'); }}>Export your board instead <ArrowRight size={14}/></button></aside>}</div>{camera && <CameraPanel sessionKey={emptySection?'section:'+viewedSection.id:selectedPage.id} onClose={() => { setCamera(false); finish(); setHandStatus('Mouse & touch ready'); }} onInput={handInput} onStatus={setHandStatus} presentation={presenting} boardContains={boardContains} tool={tool}/>}{guide && <GestureGuide onClose={() => setGuide(false)}/>}{confirm && <Confirm title={confirm === 'clear' ? 'Clear this page?' : 'Delete this page?'} description="You can undo this change while this board is open." onClose={() => setConfirm(null)} onConfirm={() => { finish(); if (confirm === 'clear')
+  {!presenting && <><div className="board-undo"><button data-gesture aria-label="Undo" title="Undo (Ctrl Z)" disabled={!history.current.canUndo} onClick={undo}><Undo2 size={18}/></button><button data-gesture aria-label="Redo" title="Redo (Ctrl Shift Z)" disabled={!history.current.canRedo} onClick={redo}><Redo2 size={18}/></button></div><div className="gesture-hud"><span className={camera ? 'status-dot' : 'inactive-dot'}/><span>{camera ? handStatus : 'Mouse, touch & pen ready'}</span><i /><button data-gesture className={camera ? 'camera-on' : ''} onClick={() => setCamera(x => !x)}><Video size={15}/>{camera ? 'Stop camera' : 'Start air writing'}</button><button data-gesture aria-label="Gesture help" onClick={() => setGuide(true)}>?</button></div>{selectedPage.objects.length === 0 && <div className="canvas-empty"><span>{camera?'Pinch to draw':'Draw or type anywhere on the page'}</span><small>{camera?'Release to lift the pen.':'Choose Text to add or edit a note.'}</small></div>}</>}{presenting && <div className="presentation-controls"><button aria-label={camera?'Stop gesture camera':'Start gesture camera'} onClick={()=>setCamera(v=>!v)}><Video size={17}/></button><button data-gesture aria-label="Previous slide" disabled={pageIndex === 0} onClick={() => switchPage(pageIndex - 1)}><ArrowLeft size={18}/></button><span>{pageIndex + 1} / {project.pages.length}</span><button data-gesture aria-label="Next slide" disabled={pageIndex === project.pages.length - 1} onClick={() => switchPage(pageIndex + 1)}><ArrowRight size={18}/></button><button data-gesture onClick={() => { setPresenting(false); setTool('pen'); if (document.fullscreenElement)
+        void document.exitFullscreen(); }}><X size={16}/>Exit presentation</button></div>}</div></div>{ai && !presenting && <aside className="ai-panel"><div className="panel-heading"><h3><Sparkles size={18}/>Board assistant</h3><button data-gesture aria-label="Close assistant" onClick={() => setAI(false)}><X size={17}/></button></div><div className="ai-setup-icon"><Sparkles size={30}/></div><h2>A little intelligence.<br />A lot of possibility.</h2><p>Transcribe handwriting, explain a diagram, or create a study quiz from a snapshot you choose.</p><div className="setup-state"><span className="status-dot warning"/><strong>Server setup required</strong><p>AI is not connected in this core release. Add a server-side Gemini integration before sending board snapshots. Camera frames are never sent.</p></div><Link className="btn secondary" to="/settings"><Settings2 size={15}/>View project setup</Link><button data-gesture className="subtle" onClick={() => { download(new Blob([JSON.stringify(projectRef.current)], { type: 'application/json' }), `${project.name}.gestera`); toast('Editable board backup exported.'); }}>Export your board instead <ArrowRight size={14}/></button></aside>}</div>{camera && <CameraPanel paperArea={paperArea} locked={locked} onToggleLock={toggleLock} sessionKey={emptySection?'section:'+viewedSection.id:selectedPage.id} onClose={() => { setCamera(false); finish(); setHandStatus('Mouse & touch ready'); }} onInput={handInput} onStatus={setHandStatus} presentation={presenting} boardContains={boardContains} tool={tool}/>}{guide && <GestureGuide onClose={() => setGuide(false)}/>}{confirm && <Confirm title={confirm === 'clear' ? 'Clear this page?' : 'Delete this page?'} description="You can undo this change while this board is open." onClose={() => setConfirm(null)} onConfirm={() => { finish(); if (confirm === 'clear')
         updatePage([]);
     else {
         const pages = project.pages.filter((_, i) => i !== pageIndex);

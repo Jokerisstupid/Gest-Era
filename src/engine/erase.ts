@@ -23,7 +23,7 @@ export function splitStroke(stroke:Stroke,a:Point,b:Point,radius:number,id:()=>s
 }
 function shapeSegments(o:Exclude<BoardObject,Stroke>):Point[][]{
   const p=(x:number,y:number):Point=>({x,y,t:0});
-  if(o.kind==='text'){const b=bounds(o);return[[p(b.x,b.y),p(b.x+b.w,b.y),p(b.x+b.w,b.y+b.h),p(b.x,b.y+b.h),p(b.x,b.y)]];}
+  if(o.kind==='text'||o.kind==='picture'){const b=bounds(o);return[[p(b.x,b.y),p(b.x+b.w,b.y),p(b.x+b.w,b.y+b.h),p(b.x,b.y+b.h),p(b.x,b.y)]];}
   if(o.vertices?.length)return[[...o.vertices.map(v=>p(v.x,v.y)),p(o.vertices[0].x,o.vertices[0].y)]];
   if(o.shape==='ellipse')return[Array.from({length:49},(_,i)=>p(o.x+o.w/2+o.w/2*Math.cos(i*Math.PI/24),o.y+o.h/2+o.h/2*Math.sin(i*Math.PI/24)))];
   if(o.shape==='rectangle')return[[p(o.x,o.y),p(o.x+o.w,o.y),p(o.x+o.w,o.y+o.h),p(o.x,o.y+o.h),p(o.x,o.y)]];
@@ -34,9 +34,10 @@ function shapeSegments(o:Exclude<BoardObject,Stroke>):Point[][]{
 export function eraseSweep(objects:BoardObject[],a:Point,b:Point,radius:number,mode:'stroke'|'object',id:()=>string=uid){
   let changed=false;const result:BoardObject[]=[];
   for(const o of objects){
+    if(o.kind==='picture' && mode==='stroke'){result.push(o);continue;}
     let box=boxes.get(o);if(!box){box=bounds(o);boxes.set(o,box);}const extent=radius+(o.kind==='stroke'&&o.tool==='highlighter'?o.width*4:o.width)/2+(o.kind==='shape'&&o.shape==='arrow'?16:0);
     if(box.x+box.w<Math.min(a.x,b.x)-extent||box.x>Math.max(a.x,b.x)+extent||box.y+box.h<Math.min(a.y,b.y)-extent||box.y>Math.max(a.y,b.y)+extent){result.push(o);continue;}
     if(o.kind==='stroke'){const fragments=splitStroke(o,a,b,radius,id);if(fragments.length===1&&fragments[0]===o)result.push(o);else{changed=true;if(mode==='stroke')result.push(...fragments);}}
-    else{const insideText=o.kind==='text'&&[a,b].some(p=>p.x>=box.x&&p.x<=box.x+box.w&&p.y>=box.y&&p.y<=box.y+box.h);const hit=insideText||shapeSegments(o).some(line=>line.slice(1).some((q,i)=>{const p=line[i];const ts=cuts(p,q,a,b,radius+o.width/2);return ts.slice(1).some((hi,j)=>distance(lerp(p,q,(ts[j]+hi)/2),a,b)<=radius+o.width/2);}));if(hit)changed=true;else result.push(o);}
+    else{const insideText=(o.kind==='text'||o.kind==='picture')&&[a,b].some(p=>p.x>=box.x&&p.x<=box.x+box.w&&p.y>=box.y&&p.y<=box.y+box.h);const hit=insideText||shapeSegments(o).some(line=>line.slice(1).some((q,i)=>{const p=line[i];const ts=cuts(p,q,a,b,radius+o.width/2);return ts.slice(1).some((hi,j)=>distance(lerp(p,q,(ts[j]+hi)/2),a,b)<=radius+o.width/2);}));if(hit)changed=true;else result.push(o);}
   }return{objects:changed?result:objects,changed};
 }

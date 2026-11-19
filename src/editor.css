@@ -113,3 +113,42 @@
 @media (max-width:650px) {
   .gesture-mode .camera-panel.is-folded { width:min(245px,calc(100vw - 16px)); }
 }
+
+.presenter-pair { padding:10px 12px; border-block:1px solid #344663; font-size:12px; color:#dae8ff; }
+.presenter-pair p { margin:4px 0; line-height:1.5; color:#bbcae0; }
+.presenter-pair > div { display:flex; flex-wrap:wrap; gap:4px 12px; }
+.presenter-pair button { min-height:44px; font-size:12px; color:#abcaff; text-decoration:underline; }
+.camera-feed .pair-hand { position:absolute; z-index:2; transform:translate(-50%,-50%); width:44px; height:44px; border-radius:50%; border:2px solid white; background:#254ea8e8; color:white; font-weight:700; box-shadow:0 1px 6px #000a; }
+.board-lock-banner { position:absolute; z-index:12; top:8px; left:50%; transform:translateX(-50%); max-width:95%; display:flex; align-items:center; gap:12px; padding:4px 6px 4px 16px; border:1px solid #8aa7d7; background:#142440; color:#e3edff; border-radius:9px; font-size:13px; box-shadow:0 2px 12px #09111c88; white-space:nowrap; }
+.board-lock-banner button { min-height:44px; padding:0 12px; border-radius:6px; background:#315eae; color:white; }
+.gesture-mode .board-topbar .board-brand,.board-topbar .board-brand { display:grid; place-items:center; flex:0 0 44px; min-height:44px; }
+.ribbon-controls > span[role=status] { align-self:center; color:#c2d6f6; font-size:12px; }
+@media(max-width:650px){
+  .board-app .board-topbar { flex-wrap:nowrap; height:58px; min-height:58px; gap:4px; }
+  .board-topbar .bar-separator { display:none; }
+  .board-app .board-title-group input { width:100%; max-width:100%; }
+  .board-app .board-top-actions { flex:0 0 auto; }
+  .board-app .board-top-actions .present-btn { display:inline-flex; }
+  .board-app .board-top-actions [aria-label="Previous page"],.board-app .board-top-actions [aria-label="Next page"] { display:none; }
+  .board-app .board-top-actions .btn,.board-app.gesture-mode .board-top-actions [data-gesture] { min-width:44px; min-height:44px; }
+  .gesture-mode .camera-panel:not(.is-folded) { max-height: min(65dvh,490px); width:min(270px,calc(100vw - 16px)); overflow-y:auto; }
+  .gesture-mode .camera-panel:not(.is-folded) .camera-view:not(.has-error) { height:clamp(112px,19dvh,156px); }
+  .board-app .ribbon-controls { display:flex; flex-wrap:nowrap; overflow-x:auto; gap:4px; overscroll-behavior-x:contain; }
+  .board-app .ribbon-controls > button { flex:0 0 auto; min-width:52px; padding:4px 8px; min-height:44px; }
+  .board-app .presentation-controls { width:max-content; max-width:calc(100% - 12px); gap:3px; bottom:max(8px,env(safe-area-inset-bottom)); }
+  .board-app .presentation-controls button { min-width:42px; min-height:44px; }
+}
+
+
+.camera-feed .focus-hand { position:absolute; inset:0; width:100%; height:100%; cursor:crosshair; }
+.camera-feed .focus-frame { position:absolute; border:2px solid #88def2; border-radius:8px; pointer-events:none; }
+@media(max-width:650px) {
+  .board-app.gesture-mode .ribbon-controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(54px,1fr)); }
+  .board-app.gesture-mode .ribbon-controls > button { white-space:normal; min-width:0; }
+}
+
+
+.mobile-workspace-brand { display:none; }
+@media(max-width:800px){
+  .shell-header .mobile-workspace-brand { display:grid; place-items:center; flex:0 0 40px; min-height:44px; }
+}

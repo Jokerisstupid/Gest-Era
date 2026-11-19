@@ -1,7 +1,8 @@
 import type { HandLandmarker } from '@mediapipe/tasks-vision';
 import type { Hand } from './gestures/types';
+type CameraInput = HTMLVideoElement | HTMLCanvasElement;
 export interface Inference {hands:Hand[];inference:number;}
-export interface VisionBackend {mode:string;infer:(video:HTMLVideoElement,t:number)=>Promise<Inference>;close:()=>void;}
+export interface VisionBackend {mode:string;infer:(video:CameraInput,t:number)=>Promise<Inference>;close:()=>void;}
 async function workerBackend(model:string):Promise<VisionBackend>{
   const worker=new Worker('/mediapipe/hand-worker.js');
   let pending:{resolve:(v:Inference)=>void;reject:(e:Error)=>void}|undefined,closed=false,timer:ReturnType<typeof setTimeout>|undefined,frameTimer:ReturnType<typeof setTimeout>|undefined;
@@ -30,8 +31,9 @@ export async function createVisionBackend(model:string, preferCompatible=false):
   if(input && !context) {landmarker.close();throw Error('Could not prepare camera frames. Restart the camera.');}
   return{mode:`Compatible ${delegate}`,async infer(video,t){const start=performance.now();
     if(input && context){
-      const scale=Math.min(1,480/Math.max(video.videoWidth,video.videoHeight));
-      const width=Math.max(1,Math.round(video.videoWidth*scale)),height=Math.max(1,Math.round(video.videoHeight*scale));
+      const w='videoWidth' in video?video.videoWidth:video.width,h='videoHeight' in video?video.videoHeight:video.height;
+      const scale=Math.min(1,480/Math.max(w,h));
+      const width=Math.max(1,Math.round(w*scale)),height=Math.max(1,Math.round(h*scale));
       if(input.width!==width || input.height!==height){input.width=width;input.height=height;}
       context.drawImage(video,0,0,width,height);
     }

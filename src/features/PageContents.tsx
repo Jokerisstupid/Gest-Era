@@ -17,7 +17,7 @@ export default function PageContents({objects,onClose,onSelect,onEdit}:Props) {
     {objects.length===0?<p>This page is empty.</p>:<>
       <ol className="page-content-items" start={start+1}>
         {objects.slice(start,start+8).map((object,i)=>{
-          const label=object.kind==='text'?object.text:object.kind==='shape'?object.shape:object.tool+' stroke';
+          const label=object.kind==='text'?object.text:object.kind==='shape'?object.shape:object.kind==='picture'?object.name:object.tool+' stroke';
           return <li key={object.id}><span>{label}</span><div>
             <button data-gesture aria-label={'Select item '+(start+i+1)} onClick={()=>onSelect(object)}>Select</button>
             {object.kind==='text'&&<button data-gesture aria-label={'Edit note '+(start+i+1)} onClick={()=>onEdit(object)}>Edit</button>}

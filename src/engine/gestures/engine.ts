@@ -1,4 +1,5 @@
 import { clamp, cursorAnchor, extractFeatures } from './features';
+import { paperAxis } from './reach';
 import { filter } from './filter';
 import { selectHands } from './identity';
 import { thresholds } from './calibration';
@@ -29,7 +30,8 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
   const discontinuity=frame.t-previous.t>maxGap;
   if(discontinuity){end('camera frame gap',true);reset();state.identity=frame.t-previous.t>300?undefined:state.identity;state.armed=previous.armed&&!previous.pinching;}
   state.t=frame.t;
-  const selection=selectHands(frame,state.identity,settings),hand=selection.draw;
+  const selection=frame.pairedRoles ? {...selectHands({...frame,hands:frame.hands.slice(0,1)},undefined,settings),command:frame.hands[1]} : selectHands(frame,state.identity,settings);
+  const hand=selection.draw;
   if(!hand && frame.mobile && !selection.ambiguous && state.mode==='ink' && state.identity && frame.t-state.identity.t<=230) {
     state.heldThroughLoss=true;
     return {state,events,gesture:'NONE',status:'Hand briefly out of view',activeHand:'None',commandReady:false};
@@ -45,7 +47,10 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
   if(jump){end('fingertip tracking jumped',true);reset();state.tracking=tracking;state.armed=false;state.command=initialEngineState().command;return{state,events,gesture:'NONE',status:'Fingertip tracking uncertain — release and show your tips',activeHand:state.identity!.side,commandReady:false};}
   const limits=thresholds(settings.calibration,frame.mobile);
   const ratio=features.pinch,anchor=cursorAnchor(hand,ratio,settings.calibration,frame.mobile),margin=clamp(settings.region,.03,.32);
-  const x=((settings.mirror?1-anchor.x:anchor.x)-margin)/(1-2*margin),y=(anchor.y-margin)/(1-2*margin);
+  const normalize=(n:number)=>(n-margin)/(1-2*margin);
+  const mapX=(n:number)=>frame.paper?paperAxis(normalize(n),frame.paper.left,frame.paper.right):normalize(n);
+  const mapY=(n:number)=>frame.paper?paperAxis(normalize(n),frame.paper.top,frame.paper.bottom):normalize(n);
+  const x=mapX(settings.mirror?1-anchor.x:anchor.x),y=mapY(anchor.y);
   if(state.heldThroughLoss && previousIdentity) {
     const wrist=hand.landmarks[0], tip=hand.landmarks[8];
     const moved=Math.hypot(wrist.x-previousIdentity.wrist.x,wrist.y-previousIdentity.wrist.y);
@@ -96,20 +101,29 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
   if(dualPinch&&state.transformReady>=3){
     end('two-hand transform');state.armed=false;
     const a=hand.landmarks[0],b=second!.landmarks[0],dist=Math.hypot(a.x-b.x,(a.y-b.y)*(frame.aspect??1)),mid={x:settings.mirror?1-(a.x+b.x)/2:(a.x+b.x)/2,y:(a.y+b.y)/2};
-    const transformed=transformStep(dist,mid,frame.t,state.transform);
-    if(state.transform)events.push({type:'transform',scale:transformed.scale,factor:transformed.state.scale,dx:transformed.dx/(1-2*margin),dy:transformed.dy/(1-2*margin),anchor:{x:clamp((mid.x-margin)/(1-2*margin)),y:clamp((mid.y-margin)/(1-2*margin))}});
+    const screenMid={x:mapX(mid.x),y:mapY(mid.y)};
+    const transformed=transformStep(dist,screenMid,frame.t,state.transform);
+    if(state.transform)events.push({type:'transform',scale:transformed.scale,factor:transformed.state.scale,dx:transformed.dx,dy:transformed.dy,anchor:{x:clamp(screenMid.x),y:clamp(screenMid.y)}});
     else events.push({type:'transform-start'});
     state.transform=transformed.state;state.mode='transform';state.command.ready=0;
     return{state,events,cursor,gesture:'PINCH',status:'Two hands — zoom & pan',activeHand:state.identity!.side,commandReady:false};
   }
   if(state.mode==='transform'){state.mode='hover';state.transform=undefined;state.armed=false;}
   if(!dualPinch)state.transform=undefined;
-  const command=commandStep(second,frame.t,state.command,state.mode==='ink'||state.mode==='erase'||state.pinching||!!context.paused||!!context.overUI,settings.mirror,state.commandFeatures,frame.aspect??1,settings.guardCommands!==false);
-  state.command=command.state;state.commandFeatures=command.features;events.push(...command.events);
+  const slideHand=context.presentation?hand:second;
+  const command=commandStep(slideHand,frame.t,state.command,state.mode==='ink'||state.mode==='erase'||state.pinching||!!context.paused||!!context.overUI,settings.mirror,state.commandFeatures,frame.aspect??1,settings.guardCommands!==false,frame.mobile);
+  state.command=command.state;state.commandFeatures=command.features;events.push(...command.events.filter(e=>!context.presentation||e.type==='page'));
 
   state.eraseFrames=gesture==='PEACE'?state.eraseFrames+1:0;
   state.eraseSince=gesture==='PEACE'&&!blocked?(state.eraseSince??frame.t):undefined;
   if(!blocked&&!context.presentation){
+    const approach=previous.ring.at(-2),contact=previous.ring.at(-1);
+    if(context.allowDot && previous.armed && state.armed && previous.closeFrames===1 && !wasPinching && ratio>=limits.exit && !second && state.mode==='hover' &&
+      contact && approach && approach.ratio>=limits.enter && approach.ratio<limits.lead && contact.ratio<limits.enter*.72 &&
+      frame.t-approach.t<=300 && Math.hypot((contact.x-approach.x)*width,(contact.y-approach.y)*height)<8 &&
+      Math.hypot((point.x-contact.x)*width,(point.y-contact.y)*height)<10){
+      events.push({type:'begin',point:contact,points:[contact],erase:false},{type:'end',reason:'short pinch dot'});
+    }
     if(state.mode==='ink'&&!state.pinching){state.ring=priorRing;end('pinch released',true);state.ring=[point];state.candidate=undefined;}
     if(state.mode==='erase'&&gesture!=='PEACE')end('eraser released');
     if(state.pinching&&state.armed){

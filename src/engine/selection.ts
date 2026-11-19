@@ -34,7 +34,7 @@ export function arrangeSelection(objects:BoardObject[],ids:readonly string[],act
     const width=Math.max(.1,Math.min(100,o.width*factor));
     if(o.kind==='stroke')return {...o,width,points:o.points.map(p=>({...p,x:x(p.x),y:y(p.y)}))};
     if(o.kind==='text')return {...o,x:x(o.x),y:y(o.y),fontSize:o.fontSize*factor};
-    return {...o,width,x:x(o.x),y:y(o.y),w:o.w*factor,h:o.h*factor,vertices:o.vertices?.map(p=>({x:x(p.x),y:y(p.y)}))};
+    return {...o,width,x:x(o.x),y:y(o.y),w:o.w*factor,h:o.h*factor,...(o.kind==='shape'&&o.vertices?{vertices:o.vertices.map(p=>({x:x(p.x),y:y(p.y)}))}:{})};
   });
 }
 

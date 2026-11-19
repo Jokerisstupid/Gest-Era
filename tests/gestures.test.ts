@@ -133,3 +133,86 @@ describe('mobile pinch tolerance',()=>{
     assert.deepEqual(result.events.map(event=>event.type),['end']);
   });
 });
+
+import {PresenterHands} from '../src/engine/gestures/presenter';
+import {presenterRegion,fullFrameHand} from '../src/engine/gesture-crop';
+import {pinkyStep,type PinkyHold} from '../src/engine/gestures/board-lock';
+import {inkPoints} from '../src/engine/gestures/dot';
+
+describe('paired classroom controls',()=>{
+  it('requires explicit selection, ignores a bystander and expires a lost hand',()=>{
+    const owner=new PresenterHands(),teacher=syntheticHand(),student=syntheticHand('pinch',.2,-.3);
+    assert.equal(owner.follow([teacher,student],1,0).draw,undefined);
+    assert.ok(owner.pair('draw',teacher,1,0));
+    assert.deepEqual(owner.follow([student,teacher],1,80),{draw:teacher,command:undefined});
+    assert.equal(owner.follow([student],1,160).draw,undefined);
+    assert.equal(owner.follow([teacher],1,510).draw,undefined);
+    assert.equal(owner.paired,false);
+  });
+  it('requires a fresh selection after an ambiguous crossing',()=>{
+    const owner=new PresenterHands(),teacher=syntheticHand();
+    owner.pair('draw',teacher,1,0);
+    assert.equal(owner.follow([teacher,syntheticHand('open',undefined,.008)],1,80).draw,undefined);
+    assert.equal(owner.follow([teacher],1,120).draw,undefined);
+  });
+  it('gives zoom and commands exclusively to a separately selected hand',()=>{
+    const owner=new PresenterHands(),teacher=syntheticHand('pinch',.2),second=syntheticHand('pinch',.2,-.30,'Left');
+    owner.pair('draw',teacher,1,0);
+    assert.equal(owner.pair('command',teacher,1,10),false);
+    assert.ok(owner.pair('command',second,1,10));
+    assert.deepEqual(owner.follow([second,teacher],1,70),{draw:teacher,command:second});
+    assert.equal(owner.follow([second],1,140).draw,undefined);
+  });
+  it('maps cropped portrait landmarks back to camera coordinates without changing world measurements',()=>{
+    const original=syntheticHand('pinch',.22);
+    const small={...original,landmarks:original.landmarks.map(p=>({...p,x:.25+p.x*.38,y:.12+p.y*.38}))};
+    const region=presenterRegion(small)!;
+    assert.ok(region.size<1 && region.x>=0 && region.y>=0);
+    const cropped={...small,worldLandmarks:small.landmarks,landmarks:small.landmarks.map(p=>({...p,x:(p.x-region.x)/region.size,y:(p.y-region.y)/region.size}))};
+    const restored=fullFrameHand(cropped,region);
+    assert.equal(restored.worldLandmarks,cropped.worldLandmarks);
+    for(let i=0;i<21;i++) assert.ok(Math.hypot(restored.landmarks[i].x-small.landmarks[i].x,restored.landmarks[i].y-small.landmarks[i].y)<1e-8);
+  });
+  it('toggles a held pinky once and requires a deliberate release before unlocking',()=>{
+    let state:PinkyHold={fired:false},count=0;
+    for(let t=0;t<=3500;t+=70){const next=pinkyStep(state,t<1400||t>=1900,t);state=next.state;if(next.toggle)count++;}
+    assert.equal(count,2);
+    assert.equal(pinkyStep(pinkyStep({fired:false},true,0).state,true,1100).toggle,false);
+  });
+  it('uses brief stationary pinches for punctuation while preserving the motion of a line',()=>{
+    const p=(x:number,t:number)=>({x,y:50,t});
+    assert.deepEqual(inkPoints([p(41,0),p(50,50),p(51,100)],p(50,50),1),[p(50,50)]);
+    const line=[p(54,50),p(65,100)];
+    assert.deepEqual(inkPoints(line,line[0],1),line);
+    const stationary=[.9,.52,.12,.86];
+    let state=initialEngineState();const events:EngineEvent[]=[];
+    for(const [i,r] of stationary.entries()){
+      const out=step({t:i*75,hands:[syntheticHand('pinch',r)],mobile:true,viewport:{width:240,height:480}},state,settings,{allowDot:true});
+      events.push(...out.events);state=out.state;
+    }
+    assert.deepEqual(events.map(e=>e.type),['begin','end']);
+  });
+  it('accepts the selected presenter palm for slides and keeps the same motion ink-free',()=>{
+    let state=initialEngineState();const events:EngineEvent[]=[];
+    for(let i=0;i<16;i++){
+      const hand=syntheticHand('open',undefined,Math.max(0,i-7)*.033);
+      const out=step({t:i*65,pairedRoles:true,hands:[hand],mobile:true},state,settings,{presentation:true});
+      events.push(...out.events);state=out.state;
+    }
+    assert.deepEqual(events,[{type:'page',direction:1}]);
+  });
+  it('recovers visually closed tips when world depth drifts slightly, and rejects large disagreements',()=>{
+    const image=syntheticHand('pinch',.08),world=syntheticHand('pinch',.39);
+    assert.ok(extractFeatures({...image,worldLandmarks:world.landmarks})!.pinch<.30);
+    assert.ok(extractFeatures({...image,worldLandmarks:syntheticHand('pinch',.8).landmarks})!.pinch>.7);
+  });
+});
+
+import {paperAxis} from '../src/engine/gestures/reach';
+it('gives a short portrait sheet more hand travel and still reaches both toolbar edges',()=>{
+  const mapped=Array.from({length:101},(_,i)=>paperAxis(i/100,.46,.69));
+  assert.ok(Math.abs(mapped[0])<1e-8 && Math.abs(mapped.at(-1)!-1)<1e-8);
+  assert.ok(mapped.filter(v=>v>=.46 && v<=.69).length>=61);
+  assert.ok(mapped.every((v,i)=>i===0||v>mapped[i-1]));
+  assert.equal(paperAxis(.63,.07,.93),.63);
+});

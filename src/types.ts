@@ -35,7 +35,8 @@ export type TextObject = BaseObject & {
     bold?: boolean;
     italic?: boolean;
 };
-export type BoardObject = Stroke | ShapeObject | TextObject;
+export type Picture = BaseObject & { kind:'picture'; src:string; name:string; x:number; y:number; w:number; h:number };
+export type BoardObject = Stroke | ShapeObject | TextObject | Picture;
 export type Page = {
     id: string;
     title?: string;

@@ -217,7 +217,7 @@ it('gives a short portrait sheet more hand travel and still reaches both toolbar
   assert.equal(paperAxis(.63,.07,.93),.63);
 });
 
-import { NumberPairing, fingerCount, thumbDirection } from '../src/engine/gestures/hand-shortcuts';
+import { HandCyclePairing, NumberPairing, fingerCount, thumbDirection } from '../src/engine/gestures/hand-shortcuts';
 import { eraseSweep } from '../src/engine/erase';
 describe('classroom hand shortcuts',()=>{
   it('counts fingers independently of handedness',()=>{
@@ -229,6 +229,24 @@ describe('classroom hand shortcuts',()=>{
       hand.landmarks=hand.landmarks.map(p=>({...p,x:1-p.x}));
       assert.equal(fingerCount(hand,1),n);
     }
+  });
+  it('counts three distinct fist/open cycles and resets on hand loss',()=>{
+    const pairing=new HandCyclePairing();
+    let t=0;
+    const hold=(pose:'fist'|'open')=>{
+      const hand=syntheticHand(pose);
+      pairing.observe([hand],1,t);
+      t+=100;
+      const result=pairing.observe([hand],1,t);
+      t+=100;
+      return result;
+    };
+    hold('fist');hold('open');hold('open');
+    assert.equal(pairing.cycles,1);
+    pairing.observe([],1,t);
+    assert.equal(pairing.cycles,0);
+    for(let i=0;i<2;i++){hold('fist');assert.equal(hold('open'),undefined);}
+    hold('fist');assert.ok(hold('open'));
   });
   it('requires an explicitly requested number on one continuous hand',()=>{
     const hand=syntheticHand(),number=fingerCount(hand,1);

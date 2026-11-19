@@ -32,6 +32,41 @@ export class NumberPairing {
   }
 }
 
+export class HandCyclePairing {
+  private palm?:Palm;
+  private stable='';
+  private pending='';
+  private since=0;
+  private started=0;
+  cycles=0;
+
+  reset(){
+    this.palm=undefined;
+    this.stable=this.pending='';
+    this.cycles=0;
+  }
+
+  observe(hands:Hand[],aspect:number,t:number){
+    let hand=this.palm && matchPalm(this.palm,hands,aspect,t)?.hand;
+    if(!hand || t-this.started>6500){
+      this.reset();
+      const fists=hands.filter(h=>extractFeatures(h,undefined,aspect)?.gesture==='FIST');
+      if(fists.length!==1)return;
+      hand=fists[0];
+      this.started=t;
+    }
+    this.palm=palmOf(hand,aspect,t);
+    if(!this.palm)return;
+    const pose=extractFeatures(hand,undefined,aspect)?.gesture;
+    if(pose!=='FIST' && pose!=='OPEN_PALM'){this.pending='';return;}
+    if(this.pending!==pose){this.pending=pose;this.since=t;return;}
+    if(t-this.since<90 || pose===this.stable)return;
+    if(pose==='OPEN_PALM' && this.stable==='FIST')this.cycles++;
+    this.stable=pose;
+    if(this.cycles===3){const palm=this.palm;this.reset();return palm;}
+  }
+}
+
 export function thumbDirection(hand:Hand,features:Features,aspect:number,mirror:boolean):0|1|-1 {
   if(!features.thumb || features.extended.some(Boolean) || features.pinch<.55)return 0;
   const p=hand.landmarks,dx=p[4].x-p[2].x,dy=(p[4].y-p[2].y)*aspect;

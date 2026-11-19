@@ -381,6 +381,18 @@ describe('single presenter page swipe',()=>{
     }
     return turns;
   }
+  it('recognizes a sweep across the old timeout and ignores the open-hand return trip',()=>{
+    let state=initialEngineState();
+    const turns=[];
+    for(let i=0;i<=40;i++){
+      const shift=Math.max(0,Math.min((i-11)*.025,.15,(35-i)*.025));
+      const result=step({t:100+i*50,hands:[syntheticHand('open',undefined,shift)],pairedRoles:true},state,{...settings,mirror:false},
+        {shortcuts:{locked:false,waitingForPalm:false,thumbPages:true,editing:false}});
+      state=result.state;
+      turns.push(...result.events.filter(e=>e.type==='page').map(e=>e.direction));
+    }
+    assert.deepEqual(turns,[1]);
+  });
   it('turns once in screen direction and ignores vertical or locked motion',()=>{
     assert.deepEqual(replay(false),[1]);
     assert.deepEqual(replay(true),[-1]);

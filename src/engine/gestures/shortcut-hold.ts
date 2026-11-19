@@ -27,20 +27,28 @@ export function shortcutPose(hand:Hand,features:Features,aspect:number,mirror:bo
   return direction===1?'next':direction===-1?'previous':'neutral';
 }
 
-export interface PageSwipe { x:number; y:number; since:number; fired:boolean }
+interface PalmSample { x:number; y:number; t:number }
+export interface PageSwipe { samples:PalmSample[]; fired:boolean; releaseSince?:number }
 
-// Use the palm center so bending or extending a fingertip cannot turn a page.
 export function pageSwipeStep(previous:PageSwipe|undefined,hand:Hand,t:number,aspect:number,mirror:boolean){
+  if(previous?.fired)return {state:{...previous,releaseSince:undefined}};
   const palm=[0,5,9,13,17].map(i=>hand.landmarks[i]);
   const x=palm.reduce((sum,p)=>sum+p.x,0)/5;
   const y=palm.reduce((sum,p)=>sum+p.y,0)*aspect/5;
-  const fresh={x,y,since:t,fired:false};
-  if(!previous)return {state:fresh};
-  if(previous.fired)return {state:previous};
-  const dx=(x-previous.x)*(mirror?-1:1),dy=Math.abs(y-previous.y);
-  const elapsed=t-previous.since;
-  if(elapsed>650 || dy>.10)return {state:fresh};
-  if(elapsed>=100 && Math.abs(dx)>=.14 && Math.abs(dx)>dy*2.2)
-    return {state:{...previous,fired:true},direction:dx>0?1 as const:-1 as const};
-  return {state:previous};
+  const samples=(previous?.samples??[]).filter(p=>t-p.t<=700);
+  samples.push({x,y,t});
+  const state:PageSwipe={samples,fired:false};
+  // A moving window lets a sweep start after any length of stationary hover.
+  let path=0,minY=y,maxY=y;
+  for(let i=samples.length-2;i>=0;i--){
+    const p=samples[i],next=samples[i+1];
+    path+=Math.abs(next.x-p.x);
+    minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);
+    const dx=x-p.x,travel=Math.abs(dx),elapsed=t-p.t;
+    if(samples.length-i<3 || elapsed<90 || travel<.12 || travel/elapsed<.00023)continue;
+    if(travel<path*.82 || travel<(maxY-minY)*1.85)continue;
+    state.fired=true;
+    return {state,direction:(mirror?-dx:dx)>0?1 as const:-1 as const};
+  }
+  return {state};
 }

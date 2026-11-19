@@ -65,7 +65,7 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
     cyclePairing.current.reset();
     let lastPage=-Infinity,aspect=0;
     const tracker=new CameraTracker(video.current,(hands,m)=>{
-      if(!alive)return;if(key!==callbacks.current.sessionKey){const latch=state.shortcut;finish('page changed');if(latch)state.shortcut={...latch,pose:'missing',last:m.t,since:m.t};key=callbacks.current.sessionKey;}
+      if(!alive)return;if(key!==callbacks.current.sessionKey){const latch=state.shortcut,swipe=state.pageSwipe;finish('page changed');if(swipe?.fired)state.pageSwipe=swipe;if(latch)state.shortcut={...latch,pose:'missing',last:m.t,since:m.t};key=callbacks.current.sessionKey;}
       if(!loaded){loaded=true;setLoading(false);void navigator.mediaDevices.enumerateDevices().then(ds=>{if(alive)setDevices(ds.filter(d=>d.kind==='videoinput'));}).catch(()=>{});}
       if(aspect && Math.abs(m.aspect-aspect)>.12)chooseRole('draw');
       aspect=m.aspect;

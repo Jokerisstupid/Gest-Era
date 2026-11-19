@@ -30,8 +30,8 @@ export default function InkProperties(props: Props) {
         <label>Fine adjustment <input type="range" min="1" max="12" value={props.width} onChange={e=>props.onWidth(Number(e.target.value))}/> {props.width} px</label></>}
       {group === 'Shapes' && <><h3>Drag to draw</h3><div>{(['line','arrow','rectangle','ellipse','triangle'] as const).map(s=>option(s,s===props.shape,()=>{props.onShape(s);props.onClose();}))}</div>
         <h3>Freehand shapes</h3><div>{option('Hold to straighten',settings.shapeSnap,()=>settings.update({shapeSnap:!settings.shapeSnap}))}</div></>}
-      {group === 'Eraser' && <><h3>Erase</h3><div>{(['stroke','object'] as const).map(v=>option(v==='stroke'?'Part of a stroke':'Whole mark',settings.eraserMode===v,()=>settings.update({eraserMode:v})))}</div>
-        <h3>Eraser radius</h3><div>{[12,24,40].map(n=>option(n+' px',settings.eraserRadius===n,()=>settings.update({eraserRadius:n})))}</div></>}
+      {group === 'Eraser' && <><h3>Erase</h3><div>{(['stroke','ink','object'] as const).map(v=>option(v==='stroke'?'Precision eraser':v==='ink'?'Whole ink stroke':'Whole object',settings.eraserMode===v,()=>settings.update({eraserMode:v})))}</div>
+        <h3>Eraser radius</h3><div>{[8,12,24,40,48].map(n=>option(n+' px',settings.eraserRadius===n,()=>settings.update({eraserRadius:n})))}</div><label>Custom radius <input type="range" min={8} max={48} value={settings.eraserRadius} onChange={e=>settings.update({eraserRadius:Number(e.target.value)})}/> {settings.eraserRadius} px</label></>}
       {group === 'Paper' && <><h3>Page background</h3><div>{(['blank','dots','grid','ruled'] as const).map(v=>option(v,props.paper===v,()=>props.onPaper(v)))}</div></>}
     </div>
     <div className="modal-actions"><button className="btn primary" data-gesture onClick={props.onClose}><Check size={16}/>Done</button></div>

@@ -39,6 +39,7 @@ export class PresenterHands {
   private command?:Palm;
   private others:Palm[]=[];
   clear(){this.draw=this.command=undefined;this.others=[];}
+  releaseCommand(){this.command=undefined;}
   get paired(){return !!this.draw;}
   get hasCommand(){return !!this.command;}
   pair(role:HandRole, hand:Hand, aspect:number, t:number){

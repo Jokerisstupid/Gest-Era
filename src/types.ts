@@ -59,8 +59,9 @@ export type Project = {
 export type NotebookSection = { id: string; name: string; color: string };
 export type Settings = {
     calibration?: import('./engine/gestures/calibration').PinchCalibration;
+    thumbPages:boolean;
     guardCommands: boolean;
-    eraserMode: 'stroke' | 'object';
+    eraserMode: 'stroke' | 'ink' | 'object';
     eraserRadius: number;
     dominantHand: 'Left' | 'Right';
     mirror: boolean;

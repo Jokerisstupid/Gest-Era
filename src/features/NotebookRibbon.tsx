@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { MousePointer2, Pencil, Highlighter, Eraser, Square, Type, Hand, ScanLine, Lasso } from 'lucide-react';
+import { useSettings } from '../store/settings';
 import type { Tool } from '../types';
 
 const tools = [
@@ -40,6 +41,7 @@ interface Props {
 }
 
 export default function NotebookRibbon(props: Props) {
+  const settings=useSettings();
   const [group, setGroup] = useState<'Draw' | 'Insert' | 'Edit' | 'View'>('Draw');
   return <section inert={props.locked} className="notebook-ribbon" aria-label="Page tools">
     <div className="ribbon-groups" role="group" aria-label="Tool groups">
@@ -49,6 +51,7 @@ export default function NotebookRibbon(props: Props) {
     <div className="ribbon-controls" role="group" aria-label={group + ' controls'}>
       {group === 'Draw' && <>
         {tools.map(([id, label, Icon]) => <button key={id} data-gesture aria-pressed={props.tool === id} onClick={() => props.onTool(id)}><Icon size={17}/>{label}</button>)}
+        {props.tool==='eraser'&&<button data-gesture onClick={props.onProperties}>Eraser mode &amp; size</button>}
         <button data-gesture onClick={props.onNextColor} title="Cycle through ink colors">Next color</button>
         <button data-gesture onClick={props.onProperties}><i style={{ backgroundColor: props.color }}/>Ink &amp; paper</button>
       </>}
@@ -70,7 +73,7 @@ export default function NotebookRibbon(props: Props) {
         <button data-gesture disabled={!props.canCopy} onClick={props.onDelete}>Delete selection</button>
         <button data-gesture onClick={props.onClear}>Clear page</button>
       </>}
-      {group === 'View' && <>{props.zoomControls}<button data-gesture onClick={props.onLock}>Lock board</button><button data-gesture aria-pressed={props.fingerPan} onClick={props.onFingerPan}>Finger pans</button><button data-gesture onClick={props.onGuide}>Gesture guide</button></>}
+      {group === 'View' && <>{props.zoomControls}<button data-gesture aria-pressed={settings.thumbPages} onClick={()=>settings.update({thumbPages:!settings.thumbPages})}>Thumb page turns</button><button data-gesture onClick={props.onLock}>Lock board</button><button data-gesture aria-pressed={props.fingerPan} onClick={props.onFingerPan}>Finger pans</button><button data-gesture onClick={props.onGuide}>Gesture guide</button></>}
     </div>
   </section>;
 }

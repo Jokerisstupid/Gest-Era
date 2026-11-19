@@ -1,3 +1,4 @@
+import type { PinchState } from './pinch';
 import type { Point } from '../../types';
 import type { Landmark, Gesture } from '../gesture';
 import type { PinchCalibration } from './calibration';
@@ -14,11 +15,12 @@ export interface FilterState { value: number; raw: number; derivative: number; t
 export interface Sample extends Point { ratio: number; }
 export interface Identity { wrist: Landmark; velocity: Landmark; t: number; side: string;otherWrist?:Landmark; }
 export interface CommandState { ready: number; wrist?: Landmark; lastT: number; fistSince?: number; fired: boolean; cooldown: number; swipe: {x:number;y:number;t:number}[];openSince?:number;armed?:boolean;actionSince?:number;action?:string; }
-export interface EngineState {
+export interface EngineState extends PinchState {
+  shortcut?:import('./shortcut-hold').ShortcutHold; presentation?:boolean;
   t: number; identity?: Identity; identityConfig?: string; features?: Features; commandFeatures?: Features;
-  fx?: FilterState; fy?: FilterState; pinching: boolean; closeFrames: number; closeSince?:number; releaseFrames?:number; heldThroughLoss?:boolean;
+  fx?: FilterState; fy?: FilterState; heldThroughLoss?:boolean;
   mode: 'hover'|'ink'|'erase'|'transform'; ring: Sample[]; candidate?: number;
-  pending: Sample[]; lastRatio?: number; eraseFrames: number; eraseSince?:number;armed: boolean;tracking?:TrackingSample;
+  eraseFrames: number; eraseSince?:number;armed: boolean;tracking?:TrackingSample;
   command: CommandState; transform?: TransformSession; transformReady: number;
 }
 export interface Cursor {inBounds:boolean;x:number;y:number;t:number;ratio:number;hand:string;gesture:Gesture;eraser:boolean;}
@@ -26,11 +28,12 @@ export type EngineEvent =
   | {type:'begin';point:Point;points:Point[];erase:boolean}
   | {type:'point';point:Point;erase:boolean}
   | {type:'end';reason:string;trimAfter?:number}
+  | {type:'toggle-lock'}
   | {type:'undo'}
   | {type:'redo'}
   | {type:'page';direction:-1|1}
   | {type:'transform-start'}
   | {type:'transform';scale:number;factor:number;dx:number;dy:number;anchor:{x:number;y:number}};
-export interface Context {paused?:boolean;overUI?:boolean;presentation?:boolean;allowInk?:boolean;allowDot?:boolean;}
+export interface Context {shortcuts?:import('./shortcut-hold').ShortcutContext; dialog?:boolean;paused?:boolean;overUI?:boolean;presentation?:boolean;allowInk?:boolean;allowDot?:boolean;}
 export interface EngineOutput {state:EngineState;events:EngineEvent[];cursor?:Cursor;gesture:Gesture;status:string;activeHand:string;commandReady:boolean;}
-export function initialEngineState():EngineState{return{t:-Infinity,pinching:false,closeFrames:0,mode:'hover',ring:[],pending:[],eraseFrames:0,armed:true,command:{ready:0,lastT:0,fired:false,cooldown:0,swipe:[]},transformReady:0};}
+export function initialEngineState():EngineState{return{t:-Infinity,pinching:false,closeFrames:0,mode:'hover',ring:[],eraseFrames:0,armed:true,command:{ready:0,lastT:0,fired:false,cooldown:0,swipe:[]},transformReady:0};}

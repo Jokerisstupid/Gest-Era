@@ -1,0 +1,41 @@
+import { extractFeatures } from './features';
+import { matchPalm, palmOf } from './presenter';
+import type { Features, Hand } from './types';
+
+export function fingerCount(hand:Hand,aspect:number){
+  const features=extractFeatures(hand,undefined,aspect);
+  if(!features || features.gesture==='FIST')return 0;
+  const fingers=features.extended.filter(Boolean).length;
+  const p=hand.landmarks, dx=p[5].x-p[17].x,dy=(p[5].y-p[17].y)*aspect;
+  // A straight thumb resting across the palm should not turn a four into a five.
+  const outward=(p[4].x-p[5].x)*dx+(p[4].y-p[5].y)*aspect*dy;
+  const thumb=features.thumb && (!fingers || outward>.04*(dx*dx+dy*dy));
+  return fingers+Number(thumb);
+}
+
+type Palm=NonNullable<ReturnType<typeof palmOf>>;
+export class NumberPairing {
+  requested=0;
+  private palm?:Palm;
+  private since=0;
+  request(count:number){this.requested=count;this.palm=undefined;}
+  observe(hands:Hand[],aspect:number,t:number){
+    if(!this.requested)return;
+    const matches=hands.filter(h=>fingerCount(h,aspect)===this.requested);
+    const hand=matches[0],palm=hand&&palmOf(hand,aspect,t);
+    if(matches.length!==1 || !palm || Math.abs(palm.x-.5)>.23 || Math.abs(palm.y-.5)>.30){
+      this.palm=undefined;return;
+    }
+    if(!this.palm || t-this.palm.t>240 || matchPalm(this.palm,hands,aspect,t)?.hand!==hand)this.since=t;
+    this.palm=palm;
+    if(t-this.since>=800){this.request(0);return palm;}
+  }
+}
+
+export function thumbDirection(hand:Hand,features:Features,aspect:number,mirror:boolean):0|1|-1 {
+  if(!features.thumb || features.extended.some(Boolean) || features.pinch<.55)return 0;
+  const p=hand.landmarks,dx=p[4].x-p[2].x,dy=(p[4].y-p[2].y)*aspect;
+  const palm=Math.hypot(p[0].x-p[9].x,(p[0].y-p[9].y)*aspect);
+  if(Math.abs(dx)<Math.max(.012,palm*.42) || Math.abs(dx)<Math.abs(dy)*1.65)return 0;
+  return (mirror?-dx:dx)>0?1:-1;
+}

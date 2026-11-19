@@ -152,3 +152,7 @@
 @media(max-width:800px){
   .shell-header .mobile-workspace-brand { display:grid; place-items:center; flex:0 0 40px; min-height:44px; }
 }
+
+.presenter-pair .pair-numbers { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:3px; margin-top:6px; }
+.pair-numbers button { border:1px solid #506886; border-radius:6px; text-decoration:none; }
+.pair-numbers button[aria-pressed=true] { background:#294e91; border-color:#a8c7ff; }

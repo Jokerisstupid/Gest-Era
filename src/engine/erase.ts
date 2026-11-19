@@ -31,10 +31,10 @@ function shapeSegments(o:Exclude<BoardObject,Stroke>):Point[][]{
   if(o.shape==='arrow'){const angle=Math.atan2(o.h,o.w),tip=p(o.x+o.w,o.y+o.h);return[[p(o.x,o.y),tip],[p(tip.x-16*Math.cos(angle-.5),tip.y-16*Math.sin(angle-.5)),tip,p(tip.x-16*Math.cos(angle+.5),tip.y-16*Math.sin(angle+.5))]];}
   return[[p(o.x,o.y),p(o.x+o.w,o.y+o.h)]];
 }
-export function eraseSweep(objects:BoardObject[],a:Point,b:Point,radius:number,mode:'stroke'|'object',id:()=>string=uid){
+export function eraseSweep(objects:BoardObject[],a:Point,b:Point,radius:number,mode:'stroke'|'ink'|'object',id:()=>string=uid){
   let changed=false;const result:BoardObject[]=[];
   for(const o of objects){
-    if(o.kind==='picture' && mode==='stroke'){result.push(o);continue;}
+    if((mode==='ink' && o.kind!=='stroke') || (o.kind==='picture' && mode==='stroke')){result.push(o);continue;}
     let box=boxes.get(o);if(!box){box=bounds(o);boxes.set(o,box);}const extent=radius+(o.kind==='stroke'&&o.tool==='highlighter'?o.width*4:o.width)/2+(o.kind==='shape'&&o.shape==='arrow'?16:0);
     if(box.x+box.w<Math.min(a.x,b.x)-extent||box.x>Math.max(a.x,b.x)+extent||box.y+box.h<Math.min(a.y,b.y)-extent||box.y>Math.max(a.y,b.y)+extent){result.push(o);continue;}
     if(o.kind==='stroke'){const fragments=splitStroke(o,a,b,radius,id);if(fragments.length===1&&fragments[0]===o)result.push(o);else{changed=true;if(mode==='stroke')result.push(...fragments);}}

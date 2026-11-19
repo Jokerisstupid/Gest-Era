@@ -166,6 +166,7 @@ export class CameraTracker {
       const gap=performance.now()-lastFrame;
       if(mobileCapture && !this.recovered && gap>=2500 && !document.hidden) {
         this.recovered=true;
+        this.gate.discardPending();
         this.stopFrames?.();
         clearInterval(this.watchdog);
         this.onRecover();

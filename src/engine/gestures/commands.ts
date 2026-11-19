@@ -1,12 +1,12 @@
-import { extractFeatures } from './features';
 import type { CommandState,EngineEvent,Features,Hand } from './types';
-export function commandStep(hand:Hand|undefined,t:number,previous:CommandState,busy:boolean,mirror:boolean,priorFeatures?:Features,aspect=1,guarded=true,mobile=false){
+export function commandStep(hand:Hand|undefined,t:number,previous:CommandState,busy:boolean,mirror:boolean,features:Features|undefined,guarded=true,mobile=false,paired=false){
   const state:CommandState={...previous,swipe:[...previous.swipe]};const events:EngineEvent[]=[];
-  if(!hand||hand.score<=.7||busy){state.ready=0;state.openSince=state.actionSince=undefined;state.armed=false;state.action=undefined;state.fired=false;state.swipe=[];state.wrist=undefined;return{state,events};}
+  // The SDK score is handedness confidence. An explicitly paired hand already has a tracked identity.
+  if(!hand||!features||(!paired && hand.score<=.7)||busy){state.ready=0;state.openSince=state.actionSince=undefined;state.armed=false;state.action=undefined;state.fired=false;state.swipe=[];state.wrist=undefined;return{state,events};}
   const wrist=hand.landmarks[0],continuous=!!state.wrist&&t-state.lastT<(mobile?290:180)&&Math.hypot(wrist.x-state.wrist.x,wrist.y-state.wrist.y)<.20;
-  state.ready=continuous?state.ready+1:1;state.lastT=t;state.wrist=wrist;const features=extractFeatures(hand,priorFeatures,aspect);
+  state.ready=continuous?state.ready+1:1;state.lastT=t;state.wrist=wrist;
   if(!continuous){state.armed=false;state.openSince=state.actionSince=undefined;state.action=undefined;state.swipe=[];}
-  if(state.ready<3||!features)return{state,events,features};
+  if(state.ready<3)return{state,events};
   if(features.gesture==='OPEN_PALM'){
     state.openSince??=t;if(t-state.openSince>=250)state.armed=true;
     state.actionSince=undefined;state.action=undefined;state.fired=false;
@@ -19,5 +19,5 @@ export function commandStep(hand:Hand|undefined,t:number,previous:CommandState,b
     if(action!==state.action){state.action=action;state.actionSince=action?t:undefined;state.fired=false;}
     if(action&&(!guarded||state.armed)&&!state.fired&&state.actionSince!==undefined&&t-state.actionSince>=800&&t>=state.cooldown){events.push({type:action});state.fired=true;state.armed=false;state.cooldown=t+1200;}
   }
-  return{state,events,features};
+  return{state,events};
 }

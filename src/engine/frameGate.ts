@@ -5,8 +5,10 @@ export class FrameGate {
     if(this.active||this.stopped)return false;this.active=true;const generation=this.generation;
     try{const result=await job();if(!this.stopped&&generation===this.generation)consume(result);}
     catch(error){if(!this.stopped&&generation===this.generation)onError(error);}
-    finally{if(generation===this.generation)this.active=false;}return true;
+    finally{this.active=false;}return true;
   }
   get busy(){return this.active;}
+  // Keep the backend busy until the old inference settles, but ignore its result or error.
+  discardPending(){this.generation++;}
   stop(){this.stopped=true;this.generation++;this.active=false;}
 }

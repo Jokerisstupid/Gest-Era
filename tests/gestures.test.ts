@@ -136,7 +136,7 @@ describe('mobile pinch tolerance',()=>{
 
 import {PresenterHands} from '../src/engine/gestures/presenter';
 import {presenterRegion,fullFrameHand} from '../src/engine/gesture-crop';
-import {pinkyStep,type PinkyHold} from '../src/engine/gestures/board-lock';
+import {holdStep,type ShortcutHold} from '../src/engine/gestures/shortcut-hold';
 import {inkPoints} from '../src/engine/gestures/dot';
 
 describe('paired classroom controls',()=>{
@@ -174,10 +174,10 @@ describe('paired classroom controls',()=>{
     for(let i=0;i<21;i++) assert.ok(Math.hypot(restored.landmarks[i].x-small.landmarks[i].x,restored.landmarks[i].y-small.landmarks[i].y)<1e-8);
   });
   it('toggles a held pinky once and requires a deliberate release before unlocking',()=>{
-    let state:PinkyHold={fired:false},count=0;
-    for(let t=0;t<=3500;t+=70){const next=pinkyStep(state,t<1400||t>=1900,t);state=next.state;if(next.toggle)count++;}
+    let state:ShortcutHold|undefined,count=0;
+    for(let t=0;t<=3500;t+=70){const next=holdStep(state,t<1400||t>=1900?'lock':'neutral',t);state=next.state;if(next.action)count++;}
     assert.equal(count,2);
-    assert.equal(pinkyStep(pinkyStep({fired:false},true,0).state,true,1100).toggle,false);
+    assert.equal(holdStep(holdStep(undefined,'lock',0).state,'lock',1100).action,undefined);
   });
   it('uses brief stationary pinches for punctuation while preserving the motion of a line',()=>{
     const p=(x:number,t:number)=>({x,y:50,t});
@@ -215,4 +215,130 @@ it('gives a short portrait sheet more hand travel and still reaches both toolbar
   assert.ok(mapped.filter(v=>v>=.46 && v<=.69).length>=61);
   assert.ok(mapped.every((v,i)=>i===0||v>mapped[i-1]));
   assert.equal(paperAxis(.63,.07,.93),.63);
+});
+
+import { NumberPairing, fingerCount, thumbDirection } from '../src/engine/gestures/hand-shortcuts';
+import { eraseSweep } from '../src/engine/erase';
+describe('classroom hand shortcuts',()=>{
+  it('counts fingers independently of handedness',()=>{
+    for(let n=1;n<=5;n++){
+      const hand=syntheticHand('open'),folded=syntheticHand('fist');
+      if(n<5)hand.landmarks.splice(1,4,...folded.landmarks.slice(1,5));
+      for(let i=n;i<4;i++)hand.landmarks.splice(5+i*4,4,...folded.landmarks.slice(5+i*4,9+i*4));
+      assert.equal(fingerCount(hand,1),n);
+      hand.landmarks=hand.landmarks.map(p=>({...p,x:1-p.x}));
+      assert.equal(fingerCount(hand,1),n);
+    }
+  });
+  it('requires an explicitly requested number on one continuous hand',()=>{
+    const hand=syntheticHand(),number=fingerCount(hand,1);
+    assert.equal(number,5);
+    const pairing=new NumberPairing();
+    assert.equal(pairing.observe([hand],1,0),undefined);
+    pairing.request(number);
+    for(let t=0;t<600;t+=100)assert.equal(pairing.observe([hand],1,t),undefined);
+    assert.equal(pairing.observe([hand,syntheticHand('open',undefined,.15)],1,600),undefined);
+    for(let t=700;t<1500;t+=100)assert.equal(pairing.observe([hand],1,t),undefined);
+    assert.ok(pairing.observe([hand],1,1500));
+    assert.equal(pairing.requested,0);
+  });
+  it('requires horizontal thumb extension and accounts for a mirrored preview',()=>{
+    const hand=syntheticHand(),pose={...extractFeatures(hand)!,extended:[false,false,false,false],thumb:true,pinch:1};
+    hand.landmarks[4]={x:.12,y:hand.landmarks[2].y};
+    assert.equal(thumbDirection(hand,pose,1,false),-1);
+    assert.equal(thumbDirection(hand,pose,1,true),1);
+    assert.equal(thumbDirection(hand,{...pose,extended:[true,false,false,false]},1,true),0);
+    hand.landmarks[4].x=hand.landmarks[2].x;
+    assert.equal(thumbDirection(hand,pose,1,true),0);
+  });
+  it('turns once per hold, including across frame loss and a direction reversal',()=>{
+    let state:ShortcutHold|undefined;const events=[];
+    for(let t=0;t<=2800;t+=100){
+      const direction=t<=700?1:t<=1000?undefined:t<1700?-1:t<2100?0:-1;
+      const next=holdStep(state,direction===1?'next':direction===-1?'previous':direction===0?'neutral':'missing',t);state=next.state;if(next.action)events.push(next.action);
+    }
+    assert.deepEqual(events,['next','previous']);
+  });
+  it('removes an entire touched ink stroke while preserving underlying slide content',()=>{
+    const line:Stroke={kind:'stroke',tool:'pen',id:'line',color:'#112233',createdAt:0,width:2,points:[{x:0,y:20,t:0},{x:100,y:20,t:100}]};
+    const note={kind:'text' as const,id:'note',color:'#112233',createdAt:0,width:1,x:40,y:25,text:'Slide',fontSize:20};
+    const p={x:50,y:35,t:120};
+    assert.equal(eraseSweep([note,line],p,p,8,'ink').changed,false);
+    assert.deepEqual(eraseSweep([note,line],p,p,24,'ink').objects,[note]);
+  });
+});
+
+describe('gesture ownership across frame boundaries',()=>{
+  const policy={locked:false,waitingForPalm:false,thumbPages:true,editing:false};
+  it('requires release when a partial toolbar pinch moves onto paper',()=>{
+    let state=initialEngineState();
+    const frames=[.9,.2,.2,.2,.9,.9,.2,.2];
+    const starts:number[]=[];
+    for(const [i,ratio] of frames.entries()){
+      const out=step({t:i*50,hands:[syntheticHand('pinch',ratio)]},state,settings,{overUI:i===1});
+      if(out.events.some(e=>e.type==='begin'))starts.push(i);
+      state=out.state;
+    }
+    assert.deepEqual(starts,[7]);
+  });
+  it('keeps two held pinches from starting zoom when leaving a dialog',()=>{
+    let state=initialEngineState();
+    for(let i=0;i<12;i++){
+      const hands=[syntheticHand('pinch',.2),syntheticHand('pinch',.2,.3,'Left')];
+      const out=step({t:i*50,hands,pairedRoles:true},state,settings,{dialog:i<4});
+      assert.ok(!out.events.some(e=>e.type==='transform-start'||e.type==='begin'));
+      state=out.state;
+    }
+  });
+  it('ends an active transform when a dialog opens',()=>{
+    let state=initialEngineState();
+    for(let i=0;i<5;i++){
+      const hands=[syntheticHand('pinch',.2),syntheticHand('pinch',.2,.3,'Left')];
+      const out=step({t:i*50,hands,pairedRoles:true},state,settings,{dialog:i===4});
+      if(i===3)assert.equal(out.state.mode,'transform');
+      if(i===4){assert.equal(out.state.mode,'hover');assert.equal(out.events.length,0);}
+      state=out.state;
+    }
+  });
+  it('keeps a paired zoom when only the SDK left-right score drops',()=>{
+    let state=initialEngineState();
+    for(let i=0;i<6;i++){
+      const second={...syntheticHand('pinch',.2,.3,'Left'),score:i<3?.95:.52};
+      state=step({t:i*50,pairedRoles:true,hands:[syntheticHand('pinch',.2),second]},state,settings).state;
+      if(i>=2)assert.equal(state.mode,'transform');
+    }
+  });
+  it('holds paired desktop ink over a brief gap and ends it if pause takes ownership',()=>{
+    let state=initialEngineState();
+    for(let i=0;i<3;i++)state=step({t:i*50,pairedRoles:true,hands:[syntheticHand('pinch',i?.2:.9)]},state,settings).state;
+    assert.equal(state.mode,'ink');
+    const lost=step({t:150,pairedRoles:true,hands:[]},state,settings);
+    assert.equal(lost.events.length,0);
+    const paused=step({t:200,pairedRoles:true,hands:[]},lost.state,settings,{paused:true});
+    assert.equal(paused.events[0]?.type,'end');
+  });
+  it('validates tracking and interrupts the hold before accepting a thumb page turn',()=>{
+    const hand=syntheticHand('fist');
+    hand.landmarks.splice(1,4,...[.41,.34,.25,.16].map(x=>({x,y:.72})));
+    let state=initialEngineState();const fired:number[]=[];
+    for(let t=0;t<=1800;t+=100){
+      const observed=t===500?{...hand,landmarks:hand.landmarks.map((p,i)=>i===8?{...p,x:NaN}:p)}:hand;
+      const out=step({t,hands:[observed],pairedRoles:true},state,settings,{shortcuts:policy});
+      assert.ok(out.events.every(e=>e.type==='page'));
+      if(out.events.length)fired.push(t);state=out.state;
+    }
+    assert.deepEqual(fired,[1200]);
+  });
+});
+
+import {FrameGate} from '../src/engine/frameGate';
+it('ignores inference from a replaced camera stream without overlapping backend calls',async()=>{
+  const gate=new FrameGate(),seen:number[]=[];
+  let resolve!:(n:number)=>void;
+  const old=gate.run(()=>new Promise<number>(done=>{resolve=done;}),n=>seen.push(n),assert.fail);
+  gate.discardPending();
+  assert.equal(await gate.run(async()=>2,n=>seen.push(n),assert.fail),false);
+  resolve(1);await old;
+  await gate.run(async()=>3,n=>seen.push(n),assert.fail);
+  assert.deepEqual(seen,[3]);
 });

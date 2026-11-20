@@ -45,7 +45,7 @@ export function pageSwipeStep(previous:PageSwipe|undefined,hand:Hand,t:number,as
     if(!returned||t-rest.t<230)return {state:{samples:[{x,y,t}],rest,origin,fired:true}};
     return {state:{samples:[{x,y,t}],fired:false}};
   }
-  const samples=(previous?.samples??[]).filter(p=>t-p.t<=780);
+  const samples=(previous?.samples??[]).filter(p=>t-p.t<=900);
   samples.push({x,y,t});
   const state:PageSwipe={samples,fired:false};
   const wrist=hand.landmarks[0],middle=hand.landmarks[9];
@@ -58,7 +58,8 @@ export function pageSwipeStep(previous:PageSwipe|undefined,hand:Hand,t:number,as
     path+=Math.abs(next.x-p.x);
     minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);
     const dx=x-p.x,travel=Math.abs(dx),elapsed=t-p.t;
-    if(samples.length-i<3 || elapsed<60 || travel<minTravel || travel/elapsed<minTravel/660)continue;
+    const sparseSweep=samples.length-i===2 && elapsed>=100 && elapsed<=300 && travel>=minTravel*1.35;
+    if((samples.length-i<3 && !sparseSweep) || elapsed<60 || travel<minTravel || travel/elapsed<minTravel/850)continue;
     if(travel<path*.77 || travel<(maxY-minY)*1.55)continue;
     state.fired=true;
     state.origin=p;

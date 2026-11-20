@@ -93,7 +93,7 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
     const reserved=context.paused || context.dialog || policy.waitingForPalm;
     const continuingContact=state.pinching && features.pinch<limits.exit && !policy.locked;
     const pose=reserved?'missing':continuingContact?'neutral':shortcutPose(hand,features,frame.aspect??1,settings.mirror,policy);
-    const canSwipe=!reserved && !policy.locked && !policy.editing && policy.thumbPages &&
+    const canSwipe=!reserved && !policy.locked && !policy.editing &&
       state.mode==='hover' && !state.pinching && (secondFeatures?.pinch??Infinity)>limits.exit &&
       features.pinch>limits.exit && (features.extended.filter(Boolean).length>=3 || palmPose(hand,frame.aspect??1)==='OPEN_PALM');
     const swipe=canSwipe?pageSwipeStep(state.pageSwipe,hand,frame.t,frame.aspect??1,settings.mirror):undefined;
@@ -103,7 +103,7 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
       state.pageSwipe=frame.t-releaseSince>=160?undefined:{...state.pageSwipe,releaseSince};
     }else {
       const last=state.pageSwipe?.samples.at(-1);
-      const uncertain=pose==='neutral' && !reserved && !policy.editing && !policy.locked && policy.thumbPages &&
+      const uncertain=pose==='neutral' && !reserved && !policy.editing && !policy.locked &&
         state.mode==='hover' && features.gesture==='NONE' && features.pinch>limits.exit;
       if(!uncertain || !last || frame.t-last.t>140)state.pageSwipe=undefined;
     }

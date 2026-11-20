@@ -42,7 +42,12 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
     if(callbacks.current.locked || pauseRef.current || !role || performance.now()-t>500 || (role==='command'&&!latest.current.drawing))return;
     const match=matchPalm(marker,hands,aspect,t);
     if(match && owner.current.pair(role,match.hand,aspect,t)){
-      if(role==='draw')reach.current={x:match.palm.x,y:match.palm.y,size:match.palm.size};
+      if(role==='draw'){
+        // The cursor follows the index finger. Anchor reach near its resting position
+        // using the knuckle so tapping a number with a curled finger works too.
+        const wrist=match.hand.landmarks[0],knuckle=match.hand.landmarks[5];
+        reach.current={x:knuckle.x+.7*(knuckle.x-wrist.x),y:knuckle.y+.7*(knuckle.y-wrist.y),size:match.palm.size};
+      }
       neutralRequired.current=false;cyclePairing.current.reset();if(role==='draw')pairedSide.current=match.hand.side==='Left'||match.hand.side==='Right'?match.hand.side:undefined;
       focusRegion.current=undefined;selecting.current=null;setSelection(null);setMarkers([]);resetInput.current();
       if(window.innerWidth<=600)setFolded(true);

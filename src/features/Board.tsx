@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Circle, Download, Layers2, LoaderCircle, Maximize, Minus, Plus, Presentation, Redo2, Settings2, Sparkles, Undo2, Video, X } from 'lucide-react';
 import { repository } from '../services/storage';
@@ -90,8 +90,19 @@ function BoardEditor({ initial }: {
     } }, [update]);
     useEffect(() => { if (params.get('camera') === '1')
         setCamera(true); }, [params]);
-    useEffect(() => { const el = host.current; if (!el)
-        return; const observer = new ResizeObserver(([entry]) => setSize({ w: entry.contentRect.width, h: entry.contentRect.height })); observer.observe(el); return () => observer.disconnect(); }, []);
+    useLayoutEffect(() => {
+      const el=host.current;
+      if(!el)return;
+      const measure=()=>{
+        const {width:w,height:h}=el.getBoundingClientRect();
+        if(w>0 && h>0)setSize(previous=>previous.w===w && previous.h===h?previous:{w,h});
+      };
+      measure();
+      const observer=new ResizeObserver(measure);
+      observer.observe(el);
+      window.addEventListener('resize',measure);
+      return ()=>{observer.disconnect();window.removeEventListener('resize',measure);};
+    },[camera,presenting,pagesOpen]);
     const scale = Math.max(.01,Math.min((size.w - (size.w<600?16:60)) / BOARD_WIDTH, (size.h - 48) / BOARD_HEIGHT)) * zoom;
     const transform = { scale, tx: (size.w - BOARD_WIDTH * scale) / 2 + pan.x, ty: (size.h - BOARD_HEIGHT * scale) / 2 + pan.y };
     const transformBaseZoom=useRef(zoom);

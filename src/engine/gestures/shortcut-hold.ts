@@ -28,19 +28,29 @@ export function shortcutPose(hand:Hand,features:Features,aspect:number,mirror:bo
 }
 
 interface PalmSample { x:number; y:number; t:number }
-export interface PageSwipe { samples:PalmSample[]; fired:boolean; releaseSince?:number }
+export interface PageSwipe { samples:PalmSample[]; fired:boolean; releaseSince?:number; rest?:PalmSample; origin?:PalmSample }
 
 export function pageSwipeStep(previous:PageSwipe|undefined,hand:Hand,t:number,aspect:number,mirror:boolean){
-  if(previous?.fired)return {state:{...previous,releaseSince:undefined}};
+
   const palm=[0,5,9,13,17].map(i=>hand.landmarks[i]);
   const x=palm.reduce((sum,p)=>sum+p.x,0)/5;
   const y=palm.reduce((sum,p)=>sum+p.y,0)*aspect/5;
-  const samples=(previous?.samples??[]).filter(p=>t-p.t<=700);
+  if(previous?.fired){
+    const last=previous.samples.at(-1);
+    const anchor=previous.rest;
+    const still=anchor && Math.hypot(x-anchor.x,y-anchor.y)<.022 && last && t-last.t<=250;
+    const rest=still?anchor:{x,y,t};
+    const origin=previous.origin;
+    const returned=origin && Math.hypot(x-origin.x,y-origin.y)<.035;
+    if(!returned||t-rest.t<230)return {state:{samples:[{x,y,t}],rest,origin,fired:true}};
+    return {state:{samples:[{x,y,t}],fired:false}};
+  }
+  const samples=(previous?.samples??[]).filter(p=>t-p.t<=780);
   samples.push({x,y,t});
   const state:PageSwipe={samples,fired:false};
   const wrist=hand.landmarks[0],middle=hand.landmarks[9];
   const palmSize=Math.hypot(middle.x-wrist.x,(middle.y-wrist.y)*aspect);
-  const minTravel=Math.max(.055,Math.min(.12,palmSize*.72));
+  const minTravel=Math.max(.045,Math.min(.115,palmSize*.70));
   // A moving window lets a sweep start after any length of stationary hover.
   let path=0,minY=y,maxY=y;
   for(let i=samples.length-2;i>=0;i--){
@@ -48,9 +58,10 @@ export function pageSwipeStep(previous:PageSwipe|undefined,hand:Hand,t:number,as
     path+=Math.abs(next.x-p.x);
     minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);
     const dx=x-p.x,travel=Math.abs(dx),elapsed=t-p.t;
-    if(samples.length-i<3 || elapsed<72 || travel<minTravel || travel/elapsed<minTravel/520)continue;
-    if(travel<path*.82 || travel<(maxY-minY)*1.85)continue;
+    if(samples.length-i<3 || elapsed<60 || travel<minTravel || travel/elapsed<minTravel/660)continue;
+    if(travel<path*.77 || travel<(maxY-minY)*1.55)continue;
     state.fired=true;
+    state.origin=p;
     return {state,direction:(mirror?-dx:dx)>0?1 as const:-1 as const};
   }
   return {state};

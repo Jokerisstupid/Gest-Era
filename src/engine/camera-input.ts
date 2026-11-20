@@ -18,9 +18,24 @@ export function inputSize(width:number,height:number,maxEdge:number){
   return {width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))};
 }
 
-export function liftCameraShadows(data:Uint8ClampedArray){
-  // A bounded curve preserves bright detail while lifting darker fingers.
-  const curve=SHADOW_CURVE;
+// Meter the last known hand region. A bright window elsewhere should not set hand exposure.
+export function meterHandLight(data:Uint8ClampedArray){
+  const levels:number[]=[];
+  for(let i=0;i<data.length;i+=4)levels.push(.2126*data[i]+.7152*data[i+1]+.0722*data[i+2]);
+  levels.sort((a,b)=>a-b);
+  const percentile=(q:number)=>levels[Math.floor(q*(levels.length-1))]??128;
+  const low=percentile(.10),mid=percentile(.50),high=percentile(.90);
+  const lowLight=mid<68,glare=mid>194||(high>226&&low<82);
+  if(!lowLight&&!glare&&high-low>=58)return {lowLight,glare};
+  const gamma=Math.max(.65,Math.min(1.6,Math.log(.48)/Math.log(Math.max(.01,Math.min(.99,mid/255)))));
+  const contrast=Math.min(1.35,1+Math.max(0,90-(high-low))/180);
+  const curve=Uint8ClampedArray.from({length:256},(_,i)=>128+(255*(i/255)**gamma-128)*contrast);
+  return {lowLight,glare,curve};
+}
+
+export function liftCameraShadows(data:Uint8ClampedArray,curve:Uint8ClampedArray=SHADOW_CURVE){
+  // Apply the same tone curve to every color channel, preserving alpha.
+
   for(let i=0;i<data.length;i+=4){
     data[i]=curve[data[i]];
     data[i+1]=curve[data[i+1]];

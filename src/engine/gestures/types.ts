@@ -6,7 +6,7 @@ import type { TransformSession } from './transform';
 import type { TrackingSample } from './tracking-quality';
 export type { Landmark, Gesture };
 export interface Hand { landmarks: Landmark[]; worldLandmarks?: Landmark[]; side: string; score: number; }
-export interface Frame { paper?:import('./reach').PaperArea; t: number; hands: Hand[]; inputMirrored?: boolean; aspect?: number; fps?:number; mobile?:boolean; pairedRoles?:boolean; viewport?: { width:number; height:number }; }
+export interface Frame { reach?:import('./reach').HandReach; paper?:import('./reach').PaperArea; t: number; hands: Hand[]; inputMirrored?: boolean; aspect?: number; fps?:number; mobile?:boolean; pairedRoles?:boolean; viewport?: { width:number; height:number }; }
 export type Smoothness = 'precise' | 'balanced' | 'fast';
 export interface GestureSettings { dominantHand: 'Left'|'Right'; swapHands: boolean; mirror: boolean; region: number; smoothness: Smoothness; calibration?:PinchCalibration;guardCommands?:boolean; }
 export const defaultGestureSettings: GestureSettings = {dominantHand:'Right',swapHands:false,mirror:true,region:.07,smoothness:'balanced',guardCommands:true};

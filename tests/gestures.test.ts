@@ -454,3 +454,46 @@ describe('camera adaptation',()=>{
     assert.deepEqual(turns,[1]);
   });
 });
+
+import { meterHandLight } from '../src/engine/camera-input';
+import { reachBounds } from '../src/engine/gestures/reach';
+describe('presenter reach and light transitions',()=>{
+  it('fits a distant writing hand inside wide and portrait camera frames',()=>{
+    for(const aspect of [.42,.75,1.78]){
+      for(const ratio of [.5,1.78]){
+        const small=reachBounds({x:.21,y:.8,size:.04},aspect,ratio);
+        const large=reachBounds({x:.21,y:.8,size:.18},aspect,ratio);
+        assert.ok(small.width<=large.width && small.height<=large.height);
+        assert.ok(small.left>=0 && small.left+small.width<=1.00001 && small.top+small.height<=1.00001);
+      }
+    }
+  });
+  it('recovers visible contrast for both bright and dark hand regions',()=>{
+    function meter(values:number[]){return meterHandLight(Uint8ClampedArray.from(values.flatMap(v=>[v,v,v,255])));}
+    const bright=meter([195,205,218,225,236]),dark=meter([12,21,30,42,65]);
+    assert.ok(bright.glare && bright.curve![210]<210);
+    assert.ok(dark.lowLight && dark.curve![31]>31);
+    assert.equal(meter([45,75,128,159,211]).curve,undefined);
+  });
+  it('turns twice after returning to rest with an open palm despite a missed camera frame',()=>{
+    const offsets=[0,.035,null,.08,.13,.17,.13,.08,.03,0,0,0,0,0,0,.03,.075,.13,.17];
+    let state=initialEngineState();
+    const turns=[];
+    for(const [i,shift] of offsets.entries()){
+      const result=step({t:50+i*65,pairedRoles:true,hands:shift===null?[]:[syntheticHand('open',undefined,shift)]},
+        state,{...settings,mirror:false},{presentation:true,shortcuts:{locked:false,waitingForPalm:false,thumbPages:true,editing:false}});
+      state=result.state;
+      turns.push(...result.events.filter(e=>e.type==='page').map(e=>e.direction));
+    }
+    assert.deepEqual(turns,[1,1]);
+  });
+});
+
+it('keeps ownership when one nearby frame temporarily mislabels the presenter',()=>{
+  const owner=new PresenterHands(), hand=syntheticHand('open');
+  owner.pair('draw',hand,1,0);
+  const noisy=syntheticHand('open',undefined,.08,'Left');
+  assert.equal(owner.follow([noisy],1,100).draw,undefined);
+  const recovered=syntheticHand('open',undefined,.08);
+  assert.equal(owner.follow([recovered],1,180).draw,recovered);
+});

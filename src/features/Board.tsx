@@ -283,7 +283,14 @@ function BoardEditor({ initial }: {
       if(event.type==='point'){input('move',screenToWorld(event.point),'hand',event.erase);return;}
       if(event.type==='undo'){finish();undo();return;}
       if(event.type==='redo'){finish();redo();return;}
-      if(event.type==='page'){switchPage(pageRef.current+event.direction);return;}
+      if(event.type==='page'){
+        const next=pageRef.current+event.direction,count=projectRef.current.pages.length;
+        if(next<0 || next>=count){
+          toast(count===1?'Only one page. Add a page or import a PDF to swipe between pages.':
+            next<0?'Already on the first page.':'Already on the last page.');
+        }else switchPage(next);
+        return;
+      }
       if(event.type==='transform-start'){finish();transformBaseZoom.current=zoomRef.current;return;}
       if(event.type==='transform'){
         finish();const r=host.current!.getBoundingClientRect();

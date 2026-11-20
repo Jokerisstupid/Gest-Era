@@ -31,7 +31,7 @@ export function watchCameraFrames(video:HTMLVideoElement, onFrame:(time:number)=
     if(!stopped) scheduleVideo();
   }
 
-  function fromAnimation() {
+  function probe() {
     if(stopped) return;
     const now=performance.now();
     if(ready() && (videoHandle===undefined || now-lastNativeFrame>=500)) {
@@ -49,13 +49,22 @@ export function watchCameraFrames(video:HTMLVideoElement, onFrame:(time:number)=
         }
       }
     }
+  }
+
+  function fromAnimation(){
+    probe();
     if(!stopped) animationHandle=requestAnimationFrame(fromAnimation);
   }
 
+  // Some display compositors throttle both animation and video callbacks.
+  const heartbeat=setInterval(()=>{
+    if(!stopped && !document.hidden && performance.now()-lastProbe>160)probe();
+  },180);
   if(typeof video.requestVideoFrameCallback==='function') scheduleVideo();
   animationHandle=requestAnimationFrame(fromAnimation);
   return ()=>{
     stopped=true;
+    clearInterval(heartbeat);
     cancelAnimationFrame(animationHandle);
     if(videoHandle!==undefined) video.cancelVideoFrameCallback?.(videoHandle);
   };

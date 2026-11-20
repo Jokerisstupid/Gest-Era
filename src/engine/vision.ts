@@ -4,7 +4,7 @@ import { fullFrameHand, type CameraRegion } from './gesture-crop';
 import { FrameGate } from './frameGate';
 import { acquireCamera } from './camera-request';
 import { watchCameraFrames } from './camera-frames';
-import { cameraInputPlan,inputSize,liftCameraShadows } from './camera-input';
+import { cameraInputPlan,inputSize,liftCameraShadows,meterHandLight } from './camera-input';
 
 export type TrackedHand=Hand;
 export interface CaptureMetrics {
@@ -29,6 +29,7 @@ function frameRate(samples:number[], t:number) {
 
 export class CameraTracker {
   region?:CameraRegion;
+  meterRegion?:CameraRegion;
   trackingMissing=false;
   scanDetail=false;
   fixedRegion=false;
@@ -112,6 +113,7 @@ export class CameraTracker {
     const cameraId=track.getSettings?.().deviceId??'default';
     let lastFrame=performance.now(), lastLight=-Infinity, lowLight=false,glare=false,misses=0,processingMs=0,lastAspect=0;
 
+    let lightCurve:Uint8ClampedArray|undefined, holdLightingUntil=0;
     const fingerprint=mobileCapture && ctx?()=>{
       try {
         ctx.drawImage(this.video,0,0,16,12);
@@ -132,18 +134,18 @@ export class CameraTracker {
       if(lastAspect && Math.abs(aspect-lastAspect)>.035){this.region=undefined;misses=0;}
       lastAspect=aspect;
       void this.gate.run(async ()=>{
-        if(t-lastLight>1600 && ctx) {
+        if(t-lastLight>(misses?200:350) && ctx) {
           try {
-            ctx.drawImage(this.video,0,0,16,12);
-            const {data}=ctx.getImageData(0,0,16,12);
-            let sum=0,bright=0,dark=0;
-            for(let i=0;i<data.length;i+=4){
-              const luma=data[i]*.2126+data[i+1]*.7152+data[i+2]*.0722;
-              sum+=luma;bright+=Number(luma>239);dark+=Number(luma<75);
-            }
-            const count=data.length/4;
-            lowLight=sum/count<55;
-            glare=bright/count>.07 && dark/count>.22;
+            const roi=this.meterRegion??this.region;
+            const size=roi?.size??1;
+            ctx.drawImage(this.video,(roi?.x??0)*width,(roi?.y??0)*height,width*size,height*size,0,0,16,12);
+            const light=meterHandLight(ctx.getImageData(0,0,16,12).data);
+            lowLight=light.lowLight;
+            glare=light.glare;
+            if(light.curve){
+              lightCurve=light.curve;
+              holdLightingUntil=t+650;
+            }else if(t>=holdLightingUntil)lightCurve=undefined;
           } catch { /* Lighting feedback is optional. */ }
           lastLight=t;
         }
@@ -151,7 +153,7 @@ export class CameraTracker {
         const start=performance.now();
         const plan=cameraInputPlan(this.region,misses,processingMs>52,this.scanDetail,this.fixedRegion);
         const region=cropContext?plan.region:undefined;
-        const enhance=plan.enhance&&(lowLight||glare||misses>=3);
+        const enhance=lightCurve?misses%4!==2:plan.enhance&&misses>=3;
         let input:HTMLVideoElement|HTMLCanvasElement=this.video;
         if(cropContext && (region||enhance||Math.max(width,height)>plan.edge)){
           const size=region?.size??1;
@@ -162,7 +164,7 @@ export class CameraTracker {
           cropContext.drawImage(this.video,width*(region?.x??0),height*(region?.y??0),width*size,height*size,0,0,output.width,output.height);
           if(enhance){
             const pixels=cropContext.getImageData(0,0,output.width,output.height);
-            liftCameraShadows(pixels.data);
+            liftCameraShadows(pixels.data,lightCurve);
             cropContext.putImageData(pixels,0,0);
           }
           input=cropped;

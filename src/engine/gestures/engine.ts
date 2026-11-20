@@ -2,7 +2,7 @@ import { palmPose } from './hand-shortcuts';
 import { observePinch } from './pinch';
 import { clamp, cursorAnchor, extractFeatures } from './features';
 import {holdStep,pageSwipeStep,shortcutPose} from './shortcut-hold';
-import { paperAxis } from './reach';
+import { paperAxis,reachBounds } from './reach';
 import { filter } from './filter';
 import { selectHands } from './identity';
 import { thresholds } from './calibration';
@@ -62,6 +62,11 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
     state.heldThroughLoss=true;
     return {state,events,gesture:'NONE',status:'Hand briefly out of view',activeHand:'None',commandReady:false};
   }
+  // A brief missed observation should not erase the beginning of a paired palm sweep.
+  if(!hand && frame.pairedRoles && state.mode==='hover' && state.pageSwipe && state.identity &&
+      frame.t-state.identity.t<=180 && !context.dialog && !context.paused && !context.shortcuts?.locked){
+    return {state,events,gesture:'NONE',status:'Finding your paired hand',activeHand:'None',commandReady:false};
+  }
   if(!hand){end('hand lost',true);reset();state.armed=previous.armed&&!previous.pinching;return{state,events,gesture:'NONE',status:selection.ambiguous?'Hands overlap — separate them':'Hand lost — bring it into view',activeHand:'None',commandReady:false};}
   if(state.identity&&frame.t-state.identity.t<150&&Math.hypot(hand.landmarks[0].x-state.identity.wrist.x,hand.landmarks[0].y-state.identity.wrist.y)>.22){end('tracking position jumped',true);reset();state.armed=false;}
   const previousIdentity=state.identity;
@@ -96,7 +101,12 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
     else if(state.pageSwipe?.fired){
       const releaseSince=state.pageSwipe.releaseSince??frame.t;
       state.pageSwipe=frame.t-releaseSince>=160?undefined:{...state.pageSwipe,releaseSince};
-    }else state.pageSwipe=undefined;
+    }else {
+      const last=state.pageSwipe?.samples.at(-1);
+      const uncertain=pose==='neutral' && !reserved && !policy.editing && !policy.locked && policy.thumbPages &&
+        state.mode==='hover' && features.gesture==='NONE' && features.pinch>limits.exit;
+      if(!uncertain || !last || frame.t-last.t>140)state.pageSwipe=undefined;
+    }
     if(swipe?.direction){
       events.push({type:'page',direction:swipe.direction});
       return {state,events,gesture:'OPEN_PALM',status:'Changing page',activeHand:hand.side,commandReady:false};
@@ -114,9 +124,17 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
     state.shortcut=held.state;
   }
   const ratio=features.pinch,anchor=cursorAnchor(hand,ratio,settings.calibration,frame.mobile),margin=clamp(settings.region,.03,.32);
+  const reach=frame.reach?reachBounds(frame.reach,frame.aspect??1,width/height):undefined;
   const normalize=(n:number)=>(n-margin)/(1-2*margin);
-  const mapX=(n:number)=>frame.paper?paperAxis(normalize(n),frame.paper.left,frame.paper.right):normalize(n);
-  const mapY=(n:number)=>frame.paper?paperAxis(normalize(n),frame.paper.top,frame.paper.bottom):normalize(n);
+  const mapX=(n:number)=>{
+    const left=reach&&settings.mirror?1-reach.left-reach.width:reach?.left??0;
+    const x=normalize((n-left)/(reach?.width??1));
+    return frame.paper?paperAxis(x,frame.paper.left,frame.paper.right):x;
+  };
+  const mapY=(n:number)=>{
+    const y=normalize((n-(reach?.top??0))/(reach?.height??1));
+    return frame.paper?paperAxis(y,frame.paper.top,frame.paper.bottom):y;
+  };
   const x=mapX(settings.mirror?1-anchor.x:anchor.x),y=mapY(anchor.y);
   if(state.heldThroughLoss && previousIdentity) {
     const wrist=hand.landmarks[0], tip=hand.landmarks[8];

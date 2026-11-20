@@ -62,8 +62,18 @@ export class PresenterHands {
     let command=second?.match;
     if(draw && draw.hand===command?.hand){this.clear();return {};}
     if(!draw){
-      const visible=hands.filter(h=>h!==command?.hand).flatMap(h=>palmOf(h,aspect,t)??[]);
-      if(visible.length)this.others=visible;
+      // A distorted reading at the presenter's position can fail the size/side check.
+      // Do not register it as a bystander and reject the real hand on the next frame.
+      const known=this.others.filter(p=>t-p.t<=recoveryMs);
+      const visible=hands.filter(h=>h!==command?.hand);
+      const updated=known.map(p=>rankPalm(p,visible,aspect,t,recoveryMs).match?.palm??p);
+      for(const h of visible){
+        const palm=palmOf(h,aspect,t);
+        if(!palm || updated.some(p=>matchPalm(p,[h],aspect,t)))continue;
+        const distance=Math.hypot(palm.x-this.draw.x,(palm.y-this.draw.y)*aspect);
+        if(distance>Math.max(.14,this.draw.size*1.25))updated.push(palm);
+      }
+      this.others=updated;
       return {};
     }
     // A previously ignored hand moving into the presenter's path is still a bystander.

@@ -4,6 +4,6 @@ export const filterPresets:Record<Smoothness,{minCutoff:number;beta:number}>={pr
 export function filter(value:number,t:number,previous:FilterState|undefined,preset:Smoothness,maxGap=150):FilterState {
   if(!previous||t<=previous.t||t-previous.t>maxGap)return{value,raw:value,derivative:0,t};
   const dt=(t-previous.t)/1000,a=(c:number)=>1/(1+1/(2*Math.PI*c*dt));
-  const derivative=previous.derivative+a(1)*((value-previous.raw)/dt-previous.derivative),settings=filterPresets[preset];
-  return{value:previous.value+a(settings.minCutoff+settings.beta*Math.abs(derivative))*(value-previous.value),raw:value,derivative,t};
+  const derivative=previous.derivative+a(2)*((value-previous.raw)/dt-previous.derivative),settings=filterPresets[preset];
+  return{value:previous.value+a(settings.minCutoff+settings.beta*Math.max(0,Math.abs(derivative)-12))*(value-previous.value),raw:value,derivative,t};
 }

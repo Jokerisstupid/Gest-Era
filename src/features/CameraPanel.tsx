@@ -24,6 +24,7 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
   const [folded,setFolded]=useState(false);
   const owner=useRef(new PresenterHands()),selecting=useRef<HandRole|null>('draw');
   const focusRegion=useRef<CameraRegion|undefined>(undefined);
+  const reach=useRef<Frame['reach']>(undefined);
   const neutralRequired=useRef(false);
   const pairedSide=useRef<'Left'|'Right'|undefined>(undefined);
   const cyclePairing=useRef(new HandCyclePairing());
@@ -33,7 +34,7 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
   const resetInput=useRef(()=>{});
   const chooseRole=(role:HandRole)=>{
     cyclePairing.current.reset();focusRegion.current=undefined;
-    if(role==='draw'){pairedSide.current=undefined;owner.current.clear();setCalibrationOpen(false);}
+    if(role==='draw'){reach.current=undefined;pairedSide.current=undefined;owner.current.clear();setCalibrationOpen(false);}
     selecting.current=role;setSelection(role);setPreview(true);setFolded(false);setMarkers([]);resetInput.current();
   };
   const pair=(marker:NonNullable<ReturnType<typeof palmOf>>)=>{
@@ -41,6 +42,7 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
     if(callbacks.current.locked || pauseRef.current || !role || performance.now()-t>500 || (role==='command'&&!latest.current.drawing))return;
     const match=matchPalm(marker,hands,aspect,t);
     if(match && owner.current.pair(role,match.hand,aspect,t)){
+      if(role==='draw')reach.current={x:match.palm.x,y:match.palm.y,size:match.palm.size};
       neutralRequired.current=false;cyclePairing.current.reset();if(role==='draw')pairedSide.current=match.hand.side==='Left'||match.hand.side==='Right'?match.hand.side:undefined;
       focusRegion.current=undefined;selecting.current=null;setSelection(null);setMarkers([]);resetInput.current();
       if(window.innerWidth<=600)setFolded(true);
@@ -60,7 +62,7 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
     if(!video.current)return;
     let state=initialEngineState(),dwell=initialDwellState(),lastUI=-Infinity,loaded=false,alive=true,key=callbacks.current.sessionKey;
     const finish=(reason:string)=>{callbacks.current.onInput({type:'end',reason});state=initialEngineState();state.armed=false;dwell=initialDwellState();cursor.current?.update({x:0,y:0,visible:false,pinching:false,eraser:false,progress:0,overUI:false,label:''});};
-    owner.current.clear();pairedSide.current=undefined;focusRegion.current=undefined;selecting.current='draw';setSelection('draw');setMarkers([]);setFolded(false);setPreview(true);
+    reach.current=undefined;owner.current.clear();pairedSide.current=undefined;focusRegion.current=undefined;selecting.current='draw';setSelection('draw');setMarkers([]);setFolded(false);setPreview(true);
     resetInput.current=()=>finish('presenter selection changed');
     cyclePairing.current.reset();
     let lastPage=-Infinity,aspect=0;
@@ -70,6 +72,7 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
       if(aspect && Math.abs(m.aspect-aspect)>.035)chooseRole('draw');
       aspect=m.aspect;
       const owned=owner.current.follow(hands,m.aspect,m.t);
+      const lastFrame=latest.current;
       latest.current={hands,aspect:m.aspect,t:m.t,drawing:owned.draw};
       if(!owner.current.paired && selecting.current!=='draw')chooseRole('draw');
       if(selecting.current && !callbacks.current.locked && !pauseRef.current){
@@ -81,10 +84,21 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
       tracker.trackingMissing=owner.current.paired&&!owned.draw;
       tracker.scanDetail=selecting.current==='draw'&&!focusRegion.current;
       tracker.fixedRegion=selecting.current==='draw'&&!!focusRegion.current;
+      if(owned.draw){
+        const palm=palmOf(owned.draw,m.aspect,m.t)!;
+        const size=Math.min(.55,Math.max(.10,palm.size*2.4/Math.min(1,m.aspect)));
+        const origin=(v:number)=>Math.max(0,Math.min(1-size,v-size/2));
+        tracker.meterRegion={x:origin(palm.x),y:origin(palm.y),size};
+      }else if(selecting.current==='draw')tracker.meterRegion=undefined;
       if(selecting.current)tracker.region=selecting.current==='draw'?focusRegion.current:undefined;
       else if(owner.current.hasCommand)tracker.region=undefined;
-      else if(owned.draw)tracker.region=presenterRegion(owned.draw,tracker.region);
-      const frame:Frame={t:m.t,hands:active,pairedRoles:true,paper:callbacks.current.paperArea(),inputMirrored:m.inputMirrored,aspect:m.aspect,fps:m.fps,mobile:/Android|iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1),viewport:{width:window.innerWidth,height:window.innerHeight}},compatible=profileMatches(currentSettings.current.calibration,m.cameraId,m.aspect,pairedSide.current??drawingHand(currentSettings.current)),s:GestureSettings=recordRef.current&&recordSettings.current?recordSettings.current:{...currentSettings.current,calibration:compatible?currentSettings.current.calibration:undefined};activeSettings.current=s;
+      else if(owned.draw){
+        const before=lastFrame.drawing?.landmarks[0],now=owned.draw.landmarks[0],dt=m.t-lastFrame.t;
+        const lead=(delta:number)=>Math.max(-.10,Math.min(.10,delta*Math.min(1.5,90/dt)));
+        const motion=before&&dt>0&&dt<200?{x:lead(now.x-before.x),y:lead(now.y-before.y)}:undefined;
+        tracker.region=presenterRegion(owned.draw,tracker.region,motion);
+      }
+      const frame:Frame={t:m.t,reach:reach.current,hands:active,pairedRoles:true,paper:callbacks.current.paperArea(),inputMirrored:m.inputMirrored,aspect:m.aspect,fps:m.fps,mobile:/Android|iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1),viewport:{width:window.innerWidth,height:window.innerHeight}},compatible=profileMatches(currentSettings.current.calibration,m.cameraId,m.aspect,pairedSide.current??drawingHand(currentSettings.current)),s:GestureSettings=recordRef.current&&recordSettings.current?recordSettings.current:{...currentSettings.current,calibration:compatible?currentSettings.current.calibration:undefined};activeSettings.current=s;
       if(recordRef.current&&records.current.length<5400)records.current.push({...frame,label:labelRef.current});
       const dialog=!!document.querySelector('dialog[open]');
       const common:Context={

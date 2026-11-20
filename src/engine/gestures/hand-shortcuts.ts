@@ -33,7 +33,7 @@ export class NumberPairing {
 }
 
 // Pairing measures finger curl independently of the pen/pinch classifier.
-function cyclePose(hand:Hand,aspect:number){
+export function palmPose(hand:Hand,aspect:number){
   const world=hand.worldLandmarks;
   const points=world?.length===21 && world.every(p=>[p.x,p.y,p.z??0].every(Number.isFinite))
     ?world:hand.landmarks.map(p=>({...p,y:p.y*aspect}));
@@ -71,14 +71,14 @@ export class HandCyclePairing {
     let hand=this.palm && matchPalm(this.palm,hands,aspect,t)?.hand;
     if(!hand || t-this.started>10000){
       this.reset();
-      const fists=hands.filter(h=>cyclePose(h,aspect)==='FIST');
+      const fists=hands.filter(h=>palmPose(h,aspect)==='FIST');
       if(fists.length!==1)return;
       hand=fists[0];
       this.started=t;
     }
     this.palm=palmOf(hand,aspect,t);
     if(!this.palm)return;
-    const pose=cyclePose(hand,aspect);
+    const pose=palmPose(hand,aspect);
     if(pose!=='FIST' && pose!=='OPEN_PALM'){this.pending='';return;}
     if(this.pending!==pose){this.pending=pose;this.since=t;return;}
     if(t-this.since<30 || pose===this.stable)return;

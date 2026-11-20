@@ -16,9 +16,11 @@ export function extractFeatures(hand:Hand,previous?:Features,aspect=1):Features|
     const planar=(a:number,b:number)=>Math.hypot(image[a].x-image[b].x,image[a].y-image[b].y);
     const imagePalm=Math.max(planar(0,9),planar(5,17));
     const projected=planar(4,8)/Math.max(.001,imagePalm);
-    // A noisy depth estimate can mask visible contact. Only blend when both views put the tips close.
-    if(imagePalm>.025 && projected<.30 && pinch<.62 && projected<pinch)
-      pinch-=Math.min(.11,(pinch-projected)*.42);
+    // Use stronger image evidence only when the fingertips nearly coincide.
+    if(imagePalm>.020 && projected<.30 && pinch<.66 && projected<pinch){
+      const contact=clamp((.30-projected)/.20);
+      pinch-=Math.min(.10+.09*contact,(pinch-projected)*(.40+.20*contact));
+    }
   }
   const extended=[5,9,13,17].map((base,i)=>{const stay=previous?.extended[i]??false;return angle(source[base],source[base+1],source[base+2])>(stay?140:156)&&angle(source[base+1],source[base+2],source[base+3])>(stay?132:145)&&angle(source[0],source[base],source[base+1])>(stay?92:108);});
   const thumb=angle(source[1],source[2],source[3])>(previous?.thumb?125:145)&&angle(source[2],source[3],source[4])>(previous?.thumb?135:150)&&distance(source[4],source[5])/palm>(previous?.thumb ? .28 : .38);

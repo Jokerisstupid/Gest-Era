@@ -99,7 +99,10 @@ function BoardEditor({ initial }: {
     const viewport = useRef(transform);
     viewport.current = transform;
     const prepare = useCallback((canvas: HTMLCanvasElement | null, clear = true) => { if (!canvas)
-        return null; const dpr = window.devicePixelRatio || 1; if (canvas.width !== Math.round(size.w * dpr) || canvas.height !== Math.round(size.h * dpr)) {
+        return null;
+        const pixelBudget=canvas===committed.current?4200000:2300000;
+        const dpr=Math.min(window.devicePixelRatio||1,Math.sqrt(pixelBudget/Math.max(1,size.w*size.h)));
+        if (canvas.width !== Math.round(size.w * dpr) || canvas.height !== Math.round(size.h * dpr)) {
         canvas.width = Math.round(size.w * dpr);
         canvas.height = Math.round(size.h * dpr);
     } const ctx = canvas.getContext('2d')!; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); if (clear)
@@ -321,7 +324,7 @@ function BoardEditor({ initial }: {
         };
         canvas.addEventListener('wheel',wheel,{passive:false});return()=>canvas.removeEventListener('wheel',wheel);
     },[]);
-    const switchPage = useCallback((index: number) => { finish(); const next=Math.max(0,Math.min(projectRef.current.pages.length-1,index));setSectionView(projectRef.current.pages[next].sectionId);setPageIndex(next); setSelected([]); setPan({ x: 0, y: 0 }); setZoom(1); }, [finish]);
+    const switchPage = useCallback((index: number) => { const next=Math.max(0,Math.min(projectRef.current.pages.length-1,index));if(next===pageRef.current)return;finish();setSectionView(projectRef.current.pages[next].sectionId);setPageIndex(next); setSelected([]); setPan({ x: 0, y: 0 }); setZoom(1); }, [finish]);
     const copySelection = useCallback(()=>{
         const page=projectRef.current.pages[pageRef.current];
         setClipboard(page.objects.filter(o=>selectedRef.current.includes(o.id)));

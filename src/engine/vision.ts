@@ -4,11 +4,12 @@ import { fullFrameHand, type CameraRegion } from './gesture-crop';
 import { FrameGate } from './frameGate';
 import { acquireCamera } from './camera-request';
 import { watchCameraFrames } from './camera-frames';
+import { cameraInputPlan,inputSize,liftCameraShadows } from './camera-input';
 
 export type TrackedHand=Hand;
 export interface CaptureMetrics {
   t:number; fps:number; captureFPS:number; inference:number; pipeline:number;
-  backend:string; lowLight:boolean; aspect:number; inputMirrored:false; cameraId:string;
+  backend:string; lowLight:boolean; glare:boolean; width:number; height:number; aspect:number; inputMirrored:false; cameraId:string;
 }
 
 const model='/mediapipe/hand_landmarker.task';
@@ -28,6 +29,9 @@ function frameRate(samples:number[], t:number) {
 
 export class CameraTracker {
   region?:CameraRegion;
+  trackingMissing=false;
+  scanDetail=false;
+  fixedRegion=false;
   private stream?:MediaStream;
   private backend?:VisionBackend;
   private gate=new FrameGate();
@@ -77,7 +81,7 @@ export class CameraTracker {
     try {
       if(!navigator.mediaDevices?.getUserMedia) throw Error('Open GestEra directly in your browser over HTTPS to use the camera.');
       const appleMobile=isAppleMobile();
-      const width=appleMobile?480:640,height=appleMobile?360:480;
+      const width=appleMobile?480:960,height=appleMobile?360:540;
       const stream=await acquireCamera(navigator.mediaDevices.getUserMedia({
         video:{width:{ideal:width},height:{ideal:height},frameRate:{ideal:30},
           ...(deviceId?{deviceId:{exact:deviceId}}:{facingMode:{ideal:'user'}})},audio:false
@@ -99,14 +103,14 @@ export class CameraTracker {
 
   private trackFrames(track:MediaStreamTrack, compatible:boolean, mobileCapture:boolean, deviceId?:string) {
     this.region=undefined;
-    const cropped=document.createElement('canvas'), cropContext=cropped.getContext('2d');
+    const cropped=document.createElement('canvas'), cropContext=cropped.getContext('2d',{willReadFrequently:true});
     const captured:number[]=[], processed:number[]=[];
     const sample=document.createElement('canvas');
     sample.width=16;
     sample.height=12;
     const ctx=sample.getContext('2d',{willReadFrequently:true});
     const cameraId=track.getSettings?.().deviceId??'default';
-    let lastFrame=performance.now(), lastLight=-Infinity, lowLight=false;
+    let lastFrame=performance.now(), lastLight=-Infinity, lowLight=false,glare=false,misses=0,processingMs=0,lastAspect=0;
 
     const fingerprint=mobileCapture && ctx?()=>{
       try {
@@ -122,34 +126,55 @@ export class CameraTracker {
       lastFrame=t;
       const captureFPS=frameRate(captured,t);
       if(this.gate.busy) return;
-      const aspect=this.video.videoHeight/this.video.videoWidth;
+      const width=this.video.videoWidth,height=this.video.videoHeight;
+      if(!width||!height)return;
+      const aspect=height/width;
+      if(lastAspect && Math.abs(aspect-lastAspect)>.035){this.region=undefined;misses=0;}
+      lastAspect=aspect;
       void this.gate.run(async ()=>{
-        if(!mobileCapture && t-lastLight>2000 && ctx) {
+        if(t-lastLight>1600 && ctx) {
           try {
             ctx.drawImage(this.video,0,0,16,12);
             const {data}=ctx.getImageData(0,0,16,12);
-            let sum=0;
-            for(let i=0;i<data.length;i+=4) sum+=data[i]*.2126+data[i+1]*.7152+data[i+2]*.0722;
-            lowLight=sum/(data.length/4)<45;
+            let sum=0,bright=0,dark=0;
+            for(let i=0;i<data.length;i+=4){
+              const luma=data[i]*.2126+data[i+1]*.7152+data[i+2]*.0722;
+              sum+=luma;bright+=Number(luma>239);dark+=Number(luma<75);
+            }
+            const count=data.length/4;
+            lowLight=sum/count<55;
+            glare=bright/count>.07 && dark/count>.22;
           } catch { /* Lighting feedback is optional. */ }
           lastLight=t;
         }
         const backend=this.backend!;
         const start=performance.now();
-        const region=cropContext?this.region:undefined;
-        if(region && cropContext){
-          const w=this.video.videoWidth,h=this.video.videoHeight;
-          const target=Math.min(1,640/Math.max(w*region.size,h*region.size));
-          const cw=Math.max(1,Math.round(w*region.size*target)),ch=Math.max(1,Math.round(h*region.size*target));
-          if(cropped.width!==cw || cropped.height!==ch){cropped.width=cw;cropped.height=ch;}
-          cropContext.drawImage(this.video,w*region.x,h*region.y,w*region.size,h*region.size,0,0,cw,ch);
+        const plan=cameraInputPlan(this.region,misses,processingMs>52,this.scanDetail,this.fixedRegion);
+        const region=cropContext?plan.region:undefined;
+        const enhance=plan.enhance&&(lowLight||glare||misses>=3);
+        let input:HTMLVideoElement|HTMLCanvasElement=this.video;
+        if(cropContext && (region||enhance||Math.max(width,height)>plan.edge)){
+          const size=region?.size??1;
+          const output=inputSize(width*size,height*size,enhance?Math.min(plan.edge,480):plan.edge);
+          if(cropped.width!==output.width || cropped.height!==output.height){
+            cropped.width=output.width;cropped.height=output.height;
+          }
+          cropContext.drawImage(this.video,width*(region?.x??0),height*(region?.y??0),width*size,height*size,0,0,output.width,output.height);
+          if(enhance){
+            const pixels=cropContext.getImageData(0,0,output.width,output.height);
+            liftCameraShadows(pixels.data);
+            cropContext.putImageData(pixels,0,0);
+          }
+          input=cropped;
         }
-        const result=await deadline(backend.infer(region?cropped:this.video,t),4500,'Hand tracking stopped responding.');
+        const result=await deadline(backend.infer(input,t),4500,'Hand tracking stopped responding.');
         if(region)result.hands=result.hands.map(hand=>fullFrameHand(hand,region));
         return {...result,backend:backend.mode,pipeline:performance.now()-start};
       },result=>{
+        processingMs=processingMs*.85+result.pipeline*.15;
         this.onFrame(result.hands,{t,fps:frameRate(processed,t),captureFPS,inference:result.inference,
-          pipeline:result.pipeline,backend:result.backend,lowLight,aspect,inputMirrored:false,cameraId});
+          pipeline:result.pipeline,backend:result.backend,lowLight,glare,width,height,aspect,inputMirrored:false,cameraId});
+        misses=this.trackingMissing||!result.hands.length?misses+1:0;
       },error=>{
         if(compatible) {this.fail(error);return;}
         this.stopFrames?.();
@@ -164,7 +189,7 @@ export class CameraTracker {
 
     this.watchdog=setInterval(()=>{
       const gap=performance.now()-lastFrame;
-      if(mobileCapture && !this.recovered && gap>=2500 && !document.hidden) {
+      if(!this.recovered && gap>=2500 && !document.hidden) {
         this.recovered=true;
         this.gate.discardPending();
         this.stopFrames?.();

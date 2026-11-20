@@ -38,6 +38,9 @@ export function pageSwipeStep(previous:PageSwipe|undefined,hand:Hand,t:number,as
   const samples=(previous?.samples??[]).filter(p=>t-p.t<=700);
   samples.push({x,y,t});
   const state:PageSwipe={samples,fired:false};
+  const wrist=hand.landmarks[0],middle=hand.landmarks[9];
+  const palmSize=Math.hypot(middle.x-wrist.x,(middle.y-wrist.y)*aspect);
+  const minTravel=Math.max(.055,Math.min(.12,palmSize*.72));
   // A moving window lets a sweep start after any length of stationary hover.
   let path=0,minY=y,maxY=y;
   for(let i=samples.length-2;i>=0;i--){
@@ -45,7 +48,7 @@ export function pageSwipeStep(previous:PageSwipe|undefined,hand:Hand,t:number,as
     path+=Math.abs(next.x-p.x);
     minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);
     const dx=x-p.x,travel=Math.abs(dx),elapsed=t-p.t;
-    if(samples.length-i<3 || elapsed<90 || travel<.12 || travel/elapsed<.00023)continue;
+    if(samples.length-i<3 || elapsed<72 || travel<minTravel || travel/elapsed<minTravel/520)continue;
     if(travel<path*.82 || travel<(maxY-minY)*1.85)continue;
     state.fired=true;
     return {state,direction:(mirror?-dx:dx)>0?1 as const:-1 as const};

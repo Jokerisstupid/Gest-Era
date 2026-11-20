@@ -120,7 +120,7 @@ describe('mobile pinch tolerance',()=>{
     assert.deepEqual(record(330,.36),['begin']);
     assert.deepEqual(record(412),[]);
     assert.deepEqual(record(500,.36),['point']);
-    assert.deepEqual(record(580,.59),['point']);
+    assert.deepEqual(record(580,.59),[]);
     assert.deepEqual(record(660,.36),['point']);
     assert.deepEqual(record(740,.85),['end']);
   });
@@ -146,8 +146,16 @@ describe('paired classroom controls',()=>{
     assert.ok(owner.pair('draw',teacher,1,0));
     assert.deepEqual(owner.follow([student,teacher],1,80),{draw:teacher,command:undefined});
     assert.equal(owner.follow([student],1,160).draw,undefined);
-    assert.equal(owner.follow([teacher],1,510).draw,undefined);
+    assert.equal(owner.follow([teacher],1,910).draw,undefined);
     assert.equal(owner.paired,false);
+  });
+  it('reacquires the paired hand after a brief loss without accepting a visible bystander',()=>{
+    const owner=new PresenterHands(),teacher=syntheticHand(),student=syntheticHand('open',undefined,-.22);
+    assert.ok(owner.pair('draw',teacher,1,0));
+    assert.equal(owner.follow([student,teacher],1,60).draw,teacher);
+    assert.equal(owner.follow([student],1,250).draw,undefined);
+    assert.equal(owner.follow([],1,420).draw,undefined);
+    assert.equal(owner.follow([student,teacher],1,650).draw,teacher);
   });
   it('requires a fresh selection after an ambiguous crossing',()=>{
     const owner=new PresenterHands(),teacher=syntheticHand();
@@ -398,5 +406,51 @@ describe('single presenter page swipe',()=>{
     assert.deepEqual(replay(true),[-1]);
     assert.deepEqual(replay(false,true),[]);
     assert.deepEqual(replay(false,false,true),[]);
+  });
+});
+
+import { cameraInputPlan,inputSize,liftCameraShadows } from '../src/engine/camera-input';
+describe('camera adaptation',()=>{
+  it('keeps the raster proportional on wide and portrait cameras and switches to full frame after loss',()=>{
+    assert.deepEqual(inputSize(1920,800,768),{width:768,height:320});
+    assert.deepEqual(inputSize(720,1280,480),{width:270,height:480});
+    const region={x:.3,y:.2,size:.5};
+    assert.equal(cameraInputPlan(region,1,false).region,region);
+    assert.equal(cameraInputPlan(region,2,false).region,undefined);
+    assert.equal(cameraInputPlan(region,2,true,false,true).region,region);
+    assert.ok(cameraInputPlan(undefined,3,false,true).region);
+    const pixels=new Uint8ClampedArray([30,60,255,123]);
+    liftCameraShadows(pixels);
+    assert.ok(pixels[0]>30&&pixels[1]>60);
+    assert.deepEqual([...pixels.slice(2)],[255,123]);
+  });
+  it('resumes an active pinch after a brief detection gap without adding a point during the gap',()=>{
+    let state=initialEngineState();
+    const run=(t:number,hands:Hand[])=>{
+      const result=step({t,hands,pairedRoles:true,aspect:.56,fps:10,viewport:{width:3840,height:2160}},state,settings);
+      state=result.state;
+      return result.events.map(e=>e.type);
+    };
+    run(0,[syntheticHand('pinch',.8)]);
+    run(100,[syntheticHand('pinch',.12)]);
+    assert.deepEqual(run(200,[syntheticHand('pinch',.12)]),['begin']);
+    assert.deepEqual(run(300,[]),[]);
+    assert.deepEqual(run(400,[syntheticHand('pinch',.12,.015)]),['point']);
+    assert.deepEqual(run(500,[]),[]);
+    assert.deepEqual(run(600,[syntheticHand('pinch',.12,.17)]),['end']);
+  });
+  it('uses the same swipe direction in presentation on a wide camera at low frame rate',()=>{
+    let state=initialEngineState();
+    const turns:number[]=[];
+    for(let i=0;i<11;i++){
+      const shift=Math.min(i,5)*.016;
+      const hand=syntheticHand();
+      hand.landmarks=hand.landmarks.map(p=>({...p,x:.38+p.x*.23+shift,y:.33+p.y*.40}));
+      const result=step({t:100+i*130,aspect:.42,fps:7.7,pairedRoles:true,hands:[hand]},state,{...settings,mirror:false},
+        {presentation:true,shortcuts:{locked:false,waitingForPalm:false,thumbPages:true,editing:false}});
+      state=result.state;
+      turns.push(...result.events.filter(e=>e.type==='page').map(e=>e.direction));
+    }
+    assert.deepEqual(turns,[1]);
   });
 });

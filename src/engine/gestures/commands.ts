@@ -1,5 +1,5 @@
 import type { CommandState,EngineEvent,Features,Hand } from './types';
-export function commandStep(hand:Hand|undefined,t:number,previous:CommandState,busy:boolean,mirror:boolean,features:Features|undefined,guarded=true,mobile=false,paired=false){
+export function commandStep(hand:Hand|undefined,t:number,previous:CommandState,busy:boolean,mirror:boolean,features:Features|undefined,guarded=true,mobile=false,paired=false,allowPage=true){
   const state:CommandState={...previous,swipe:[...previous.swipe]};const events:EngineEvent[]=[];
   // The SDK score is handedness confidence. An explicitly paired hand already has a tracked identity.
   if(!hand||!features||(!paired && hand.score<=.7)||busy){state.ready=0;state.openSince=state.actionSince=undefined;state.armed=false;state.action=undefined;state.fired=false;state.swipe=[];state.wrist=undefined;return{state,events};}
@@ -10,6 +10,7 @@ export function commandStep(hand:Hand|undefined,t:number,previous:CommandState,b
   if(features.gesture==='OPEN_PALM'){
     state.openSince??=t;if(t-state.openSince>=250)state.armed=true;
     state.actionSince=undefined;state.action=undefined;state.fired=false;
+    if(!allowPage)return {state,events};
     state.swipe=state.swipe.filter(p=>t-p.t<=(mobile?480:350));state.swipe.push({x:mirror?1-wrist.x:wrist.x,y:wrist.y,t});
     const first=state.swipe[0],last=state.swipe.at(-1)!,dx=last.x-first.x,dy=last.y-first.y,dt=last.t-first.t;
     if((!guarded||state.armed)&&dt>=80&&Math.abs(dx)>.17&&Math.abs(dy)<.10&&Math.abs(dx)/(dt/1000)>(mobile?.43:.55)&&t>=state.cooldown){events.push({type:'page',direction:dx<0?1:-1});state.cooldown=t+800;state.swipe=[];}

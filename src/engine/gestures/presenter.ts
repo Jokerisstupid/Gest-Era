@@ -1,6 +1,7 @@
 import type { Hand } from './types';
 
 type Palm = { x:number; y:number; size:number; width:number; side:string; score:number; t:number };
+const recoveryMs=800;
 export type HandRole = 'draw' | 'command';
 export function palmOf(hand:Hand, aspect:number, t:number):Palm | undefined {
   const p=hand.landmarks;
@@ -11,19 +12,19 @@ export function palmOf(hand:Hand, aspect:number, t:number):Palm | undefined {
   return {x:(p[0].x+p[9].x+p[5].x+p[17].x)/4,y:(p[0].y+p[9].y+p[5].y+p[17].y)/4,
     size,width,side:hand.side,score:hand.score,t};
 }
-function rankPalm(previous:Palm, hands:Hand[], aspect:number,t:number) {
+function rankPalm(previous:Palm, hands:Hand[], aspect:number,t:number,maxAge=400) {
   const dt=t-previous.t;
-  if(dt<0 || dt>400)return {ambiguous:false};
+  if(dt<0 || dt>maxAge)return {ambiguous:false};
   const ranked=hands.flatMap(hand=>{
     const palm=palmOf(hand,aspect,t);
     if(!palm)return [];
     const distance=Math.hypot(palm.x-previous.x,(palm.y-previous.y)*aspect);
     const scale=Math.abs(Math.log(palm.size/previous.size));
     const width=Math.abs(Math.log(palm.width/previous.width));
-    const reach=Math.min(.18,previous.size*.48+Math.min(dt,160)*.00065);
-    if(distance>reach || scale>.46 || width>.8)return [];
-    if(previous.score>.86 && palm.score>.86 && palm.side!==previous.side)return [];
-    return [{hand,palm,cost:distance/reach+.7*scale+.25*width}];
+    const reach=dt>400?Math.min(.10,previous.size*.75):Math.min(.21,previous.size*.48+Math.min(dt,230)*.00085);
+    if(distance>reach || scale>(dt>400?.32:.56) || width>.8)return [];
+    if(previous.score>.86 && palm.score>.86 && palm.side!==previous.side && (dt>180 || distance>previous.size*.28))return [];
+    return [{hand,palm,cost:distance/reach+.7*scale+.25*width+(palm.side!==previous.side?.18:0)}];
   }).sort((a,b)=>a.cost-b.cost);
   const ambiguous=!!ranked[1] && ranked[1].cost-ranked[0].cost<.42;
   return {ambiguous,match:ambiguous?undefined:ranked[0]};
@@ -33,7 +34,7 @@ export function matchPalm(previous:Palm,hands:Hand[],aspect:number,t:number){
   return rankPalm(previous,hands,aspect,t).match;
 }
 
-// Only a physical selection in the live preview can create a presenter track.
+// Only an explicit pairing can create a presenter track.
 export class PresenterHands {
   private draw?:Palm;
   private command?:Palm;
@@ -51,21 +52,25 @@ export class PresenterHands {
     this[role]=palm;return true;
   }
   follow(hands:Hand[],aspect:number,t:number){
-    if(!this.draw || t-this.draw.t>400){this.clear();return {};}
-    const candidates=rankPalm(this.draw,hands,aspect,t);
+    if(!this.draw || t-this.draw.t>recoveryMs){this.clear();return {};}
+    const candidates=rankPalm(this.draw,hands,aspect,t,recoveryMs);
     if(candidates.ambiguous){this.clear();return {};}
     const draw=candidates.match;
-    if(this.command && t-this.command.t>400)this.command=undefined;
-    const second=this.command && rankPalm(this.command,hands,aspect,t);
+    if(this.command && t-this.command.t>recoveryMs)this.command=undefined;
+    const second=this.command && rankPalm(this.command,hands,aspect,t,recoveryMs);
     if(second?.ambiguous)this.command=undefined;
     let command=second?.match;
     if(draw && draw.hand===command?.hand){this.clear();return {};}
-    if(!draw)return {};
+    if(!draw){
+      const visible=hands.filter(h=>h!==command?.hand).flatMap(h=>palmOf(h,aspect,t)??[]);
+      if(visible.length)this.others=visible;
+      return {};
+    }
     // A previously ignored hand moving into the presenter's path is still a bystander.
     for(const other of this.others){
-      const rival=rankPalm(other,[draw.hand],aspect,t).match;
+      const rival=rankPalm(other,[draw.hand],aspect,t,recoveryMs).match;
       if(rival && rival.cost<=draw.cost+.10){this.clear();return {};}
-      if(command){const otherMatch=rankPalm(other,[command.hand],aspect,t).match;
+      if(command){const otherMatch=rankPalm(other,[command.hand],aspect,t,recoveryMs).match;
         if(otherMatch && otherMatch.cost<=command.cost+.10){this.command=undefined;command=undefined;}
       }
     }

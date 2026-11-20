@@ -30,12 +30,14 @@ export async function createVisionBackend(model:string, preferCompatible=false):
   const context=input?.getContext('2d');
   if(input && !context) {landmarker.close();throw Error('Could not prepare camera frames. Restart the camera.');}
   return{mode:`Compatible ${delegate}`,async infer(video,t){const start=performance.now();
-    if(input && context){
+    let source=video;
+    if(input && context && ('videoWidth' in video || Math.max(video.width,video.height)>480)){
       const w='videoWidth' in video?video.videoWidth:video.width,h='videoHeight' in video?video.videoHeight:video.height;
       const scale=Math.min(1,480/Math.max(w,h));
       const width=Math.max(1,Math.round(w*scale)),height=Math.max(1,Math.round(h*scale));
       if(input.width!==width || input.height!==height){input.width=width;input.height=height;}
       context.drawImage(video,0,0,width,height);
+      source=input;
     }
-    const r=landmarker.detectForVideo(input??video,t);return{inference:performance.now()-start,hands:r.landmarks.map((landmarks,i)=>({landmarks,worldLandmarks:r.worldLandmarks?.[i],side:r.handedness[i]?.[0]?.categoryName??'Unknown',score:r.handedness[i]?.[0]?.score??0}))};},close(){landmarker.close();}};
+    const r=landmarker.detectForVideo(source,t);return{inference:performance.now()-start,hands:r.landmarks.map((landmarks,i)=>({landmarks,worldLandmarks:r.worldLandmarks?.[i],side:r.handedness[i]?.[0]?.categoryName??'Unknown',score:r.handedness[i]?.[0]?.score??0}))};},close(){landmarker.close();}};
 }

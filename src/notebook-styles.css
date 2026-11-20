@@ -11,3 +11,11 @@
 @media(max-width:600px){.gesture-mode .board-top-actions [data-gesture],.gesture-mode .camera-head button,.gesture-mode .camera-settings-toggle{min-width:56px;min-height:56px}.gesture-mode .camera-primary-actions button{min-height:56px}.gesture-mode .board-zoom{top:76px}.gesture-mode .board-zoom [data-gesture]{min-width:56px;min-height:56px}}
 
 .notebook-template-choice{display:grid;gap:8px;margin-top:18px}.notebook-template-choice small{font-size:11px;color:#93a9c8}.notebook-template-choice select{min-height:42px}
+
+.tour-copy { min-height: 8rem; }
+.tour-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
+.tour-actions button:first-child { margin-inline-end: auto; }
+@media (max-width: 600px) {
+  .board-app .board-topbar button[aria-label="Notebook navigation"] .board-page-count { display: inline; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .tour-actions .btn { min-height: 44px; }
+}

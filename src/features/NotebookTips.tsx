@@ -36,10 +36,10 @@ export function NotebookTips({mode,onClose}:{mode:TourMode;onClose:()=>void}){
     onClose();
   }
   return <Modal title={mode==='manual'?'Notebook tools':'Gesture controls'} onClose={finish}>
-    <div aria-live="polite"><small>Tip {index+1} of {steps.length}</small><h3>{title}</h3><p>{tip}</p></div>
-    <div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:16}}>
+    <div className="tour-copy" aria-live="polite"><small>Tip {index+1} of {steps.length}</small><h3>{title}</h3><p>{tip}</p></div>
+    <div className="tour-actions">
       <button data-gesture className="btn secondary" onClick={finish}>Skip tour</button>
-      {index>0&&<button data-gesture className="btn secondary" onClick={()=>setIndex(index-1)}>Back</button>}
+      <button data-gesture className="btn secondary" disabled={index===0} onClick={()=>setIndex(index-1)}>Back</button>
       <button data-gesture className="btn primary" onClick={()=>index===steps.length-1?finish():setIndex(index+1)}>{index===steps.length-1?'Done':'Next'}</button>
     </div>
   </Modal>;

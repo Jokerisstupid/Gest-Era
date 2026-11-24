@@ -1,4 +1,4 @@
-import { angle, distance, extractFeatures } from './features';
+import { angle, distance, extractFeatures, handGeometry } from './features';
 import { matchPalm, palmOf } from './presenter';
 import type { Features, Hand } from './types';
 
@@ -34,10 +34,8 @@ export class NumberPairing {
 
 // Pairing measures finger curl independently of the pen/pinch classifier.
 export function palmPose(hand:Hand,aspect:number){
-  const world=hand.worldLandmarks;
-  const points=world?.length===21 && world.every(p=>[p.x,p.y,p.z??0].every(Number.isFinite))
-    ?world:hand.landmarks.map(p=>({...p,y:p.y*aspect}));
-  if(points.length!==21)return '';
+  const points=handGeometry(hand,aspect)?.source;
+  if(!points)return '';
   let folded=0, open=0;
   for(const base of [5,9,13,17]){
     const wrist=points[0],knuckle=points[base],tip=points[base+3];

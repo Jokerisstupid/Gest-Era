@@ -225,7 +225,7 @@ it('gives a short portrait sheet more hand travel and still reaches both toolbar
   assert.equal(paperAxis(.63,.07,.93),.63);
 });
 
-import { HandCyclePairing, NumberPairing, fingerCount, thumbDirection } from '../src/engine/gestures/hand-shortcuts';
+import { HandCyclePairing, NumberPairing, fingerCount, palmPose, thumbDirection } from '../src/engine/gestures/hand-shortcuts';
 import { eraseSweep } from '../src/engine/erase';
 describe('classroom hand shortcuts',()=>{
   it('counts fingers independently of handedness',()=>{
@@ -516,5 +516,28 @@ describe('camera workload and field of view',()=>{
     assert.equal(budget.compact,false);
     budget.observe(75,6100);
     assert.equal(budget.compact,false);
+  });
+});
+
+import { isolatedTipJump,trackingSample } from '../src/engine/gestures/tracking-quality';
+describe('distant hands and incomplete 3D observations',()=>{
+  it('keeps a valid pinch and open palm when the optional depth geometry collapses',()=>{
+    const collapsed=Array.from({length:21},()=>({x:0,y:0,z:0}));
+    for(const aspect of [.46,1,1.7]){
+      const hand=syntheticHand('pinch',.2);
+      assert.deepEqual(extractFeatures({...hand,worldLandmarks:collapsed},undefined,aspect),extractFeatures(hand,undefined,aspect));
+      const open=syntheticHand('open');
+      assert.equal(palmPose({...open,worldLandmarks:collapsed},aspect),palmPose(open,aspect));
+      assert.equal(extractFeatures({...hand,landmarks:collapsed,worldLandmarks:collapsed}),undefined);
+    }
+  });
+  it('rejects a single stretched fingertip on a distant palm while allowing coherent travel',()=>{
+    const hand=syntheticHand('open');
+    hand.landmarks=hand.landmarks.map(p=>({...p,x:p.x*.25,y:p.y*.25}));
+    const before=trackingSample(hand,100);
+    const bad={...hand,landmarks:hand.landmarks.map((p,i)=>({...p,x:p.x+(i===8?.1:0)}))};
+    const move={...hand,landmarks:hand.landmarks.map(p=>({...p,x:p.x+.1}))};
+    assert.ok(isolatedTipJump(before,trackingSample(bad,160)));
+    assert.equal(isolatedTipJump(before,trackingSample(move,160)),false);
   });
 });

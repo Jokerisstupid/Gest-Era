@@ -71,3 +71,11 @@ describe('guided gesture rehearsal',()=>{
     }
   });
 });
+
+it('rejects an out-and-back diagonal during lasso practice',()=>{
+  const motion=new PracticeMotion();
+  const point=(x:number,y:number)=>({x,y,t:100});
+  motion.accepts('lasso',{type:'begin',point:point(.3,.3),points:[],erase:false},false);
+  for(const n of [.4,.5,.4,.3])motion.accepts('lasso',{type:'point',point:point(n,n),erase:false},false);
+  assert.equal(motion.accepts('lasso',{type:'end',reason:'pinch released'},false),false);
+});

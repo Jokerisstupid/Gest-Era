@@ -154,11 +154,12 @@ export class CameraTracker {
         const start=performance.now();
         const plan=cameraInputPlan(this.region,misses,budget.compact,this.scanDetail,this.fixedRegion);
         const region=cropContext?plan.region:undefined;
+        const edge=compatible?Math.min(plan.edge,480):plan.edge;
         const enhance=lightCurve?misses%4!==2:plan.enhance&&misses>=3;
         let input:HTMLVideoElement|HTMLCanvasElement=this.video;
-        if(cropContext && (region||enhance||Math.max(width,height)>plan.edge)){
+        if(cropContext && (region||enhance||Math.max(width,height)>edge)){
           const size=region?.size??1;
-          const output=inputSize(width*size,height*size,enhance?Math.min(plan.edge,480):plan.edge);
+          const output=inputSize(width*size,height*size,enhance?Math.min(edge,480):edge);
           if(cropped.width!==output.width || cropped.height!==output.height){
             cropped.width=output.width;cropped.height=output.height;
           }

@@ -18,10 +18,10 @@ import { dwellStep, gestureTarget, initialDwellState } from './gestureUI';
 export type HandInput=EngineEvent;
 function drawingHand(settings:GestureSettings){return settings.swapHands?(settings.dominantHand==='Left'?'Right':'Left'):settings.dominantHand;}
 const labels=['unlabeled','open palm','point','pinch','peace','fist','swipe','two-hand pinch'] as const;
-export default function CameraPanel({drill,onRecognized,onClose,onInput,onStatus,presentation=false,boardContains,tool,sessionKey,locked,onToggleLock,paperArea}:{drill?:Drill|'done';onRecognized:()=>void;paperArea:()=>Frame['paper'];locked:boolean;onToggleLock:()=>void;onClose:()=>void;onInput:(event:EngineEvent)=>void;onStatus:(status:string)=>void;presentation?:boolean;boardContains:(x:number,y:number)=>boolean;tool:string;sessionKey:string}){
+export default function CameraPanel({drill,onRecognized,onPracticeHint,onClose,onInput,onStatus,presentation=false,boardContains,tool,sessionKey,locked,onToggleLock,paperArea}:{drill?:Drill|'done';onRecognized:()=>void;onPracticeHint:(text:string)=>void;paperArea:()=>Frame['paper'];locked:boolean;onToggleLock:()=>void;onClose:()=>void;onInput:(event:EngineEvent)=>void;onStatus:(status:string)=>void;presentation?:boolean;boardContains:(x:number,y:number)=>boolean;tool:string;sessionKey:string}){
   const video=useRef<HTMLVideoElement>(null),overlay=useRef<HTMLCanvasElement>(null),cursor=useRef<HandCursorHandle>(null);
-  const settings=useSettings(),currentSettings=useRef(settings),callbacks=useRef({drill,onRecognized,onInput,onStatus,boardContains,presentation,tool,sessionKey,locked,onToggleLock,paperArea});
-  currentSettings.current=settings;callbacks.current={drill,onRecognized,onInput,onStatus,boardContains,presentation,tool,sessionKey,locked,onToggleLock,paperArea};
+  const settings=useSettings(),currentSettings=useRef(settings),callbacks=useRef({drill,onRecognized,onPracticeHint,onInput,onStatus,boardContains,presentation,tool,sessionKey,locked,onToggleLock,paperArea});
+  currentSettings.current=settings;callbacks.current={drill,onRecognized,onPracticeHint,onInput,onStatus,boardContains,presentation,tool,sessionKey,locked,onToggleLock,paperArea};
   const [calibrationOpen,setCalibrationOpen]=useState(false),calibrationRef=useRef(false),calibrationFeed=useRef<CalibrationFeed|null>(null);calibrationRef.current=calibrationOpen;
   const [folded,setFolded]=useState(false);
   const owner=useRef(new PresenterHands()),selecting=useRef<HandRole|null>('draw');
@@ -133,7 +133,17 @@ export default function CameraPanel({drill,onRecognized,onClose,onInput,onStatus
       if(practicing && ((drill==='pair'&&owned.draw)||(drill==='second'&&owned.command)||(drill==='aim'&&output.gesture==='POINT'&&output.cursor?.inBounds)||(drill==='laser'&&target&&output.gesture==='POINT')))callbacks.current.onRecognized();
       // End drawing before dispatching a control. A toolbar pinch is never pen-down.
       output.events.forEach(e=>{
-        if(drill){if(practicing && drill!=='done' && practiceMotion.accepts(drill,e,output.gesture==='OPEN_PALM'))callbacks.current.onRecognized();return;}
+        if(drill){
+          if(practicing && drill!=='done'){
+            if(practiceMotion.accepts(drill,e,output.gesture==='OPEN_PALM'))callbacks.current.onRecognized();
+            else if(e.type==='page'&&(drill==='left'||drill==='right')){
+              callbacks.current.onPracticeHint(output.gesture==='OPEN_PALM'
+                ?'Other direction detected. Pause for a second, then sweep '+drill+'.'
+                :'Open your whole palm for this step.');
+            }
+          }
+          return;
+        }
         if(e.type==='toggle-lock'){callbacks.current.onToggleLock();return;}
         if(e.type==='page'){if(m.t-lastPage<360)return;lastPage=m.t;}
         callbacks.current.onInput(e);

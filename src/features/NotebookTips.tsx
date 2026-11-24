@@ -30,6 +30,7 @@ export function NotebookTips({mode,onClose,onPractice}:{mode:TourMode;onClose:()
     onClose();
   }
   return <Modal title={mode==='manual'?'Notebook tools':'Gesture controls'} onClose={finish}>
+    {mode==='gesture'&&<label className="tour-jump">Jump to a gesture<select value={index} onChange={e=>setIndex(Number(e.target.value))}>{steps.map(([name],i)=><option key={name} value={i}>{i+1}. {name}</option>)}</select></label>}
     <div className="tour-copy" aria-live="polite"><small>Tip {index+1} of {steps.length}</small><h3>{title}</h3><p>{tip}</p></div>
     {mode==='gesture' && <HandDemo key={index} id={drills[index][0]}/>}
     <div className="tour-actions">

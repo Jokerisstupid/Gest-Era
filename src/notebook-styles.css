@@ -32,3 +32,6 @@
 @keyframes practice-loop {0%,100%{transform:translate(-14px,0)}25%{transform:translate(0,-6px)}50%{transform:translate(14px,0)}75%{transform:translate(0,6px)}}
 @keyframes practice-diagonal {0%,100%{transform:translate(-12px,-5px)}65%{transform:translate(18px,7px)}}
 @media(prefers-reduced-motion:reduce){.demo-loop,.demo-diagonal{animation:none}}
+
+.tour-jump { display:grid; gap:.35rem; margin-bottom:.75rem; }
+.tour-jump select { font:inherit; color:inherit; background:var(--panel,#19263b); width:100%; min-height:44px; border:1px solid #758398; border-radius:8px; padding:0 .6rem; }

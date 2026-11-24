@@ -19,3 +19,16 @@
   .board-app .board-topbar button[aria-label="Notebook navigation"] .board-page-count { display: inline; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .tour-actions .btn { min-height: 44px; }
 }
+
+.hand-demo { display:block; width:100%; height:clamp(64px,14vh,120px); border-radius:12px; background:#18263a; }
+.demo-motion { animation: demonstrate-travel 2.8s ease-in-out infinite; }
+@keyframes demonstrate-travel { 0%,15%,100% { transform:translateX(0) } 55%,75% { transform:translateX(var(--demo-dx)) } }
+@media(prefers-reduced-motion:reduce){.demo-motion{animation:none}.hand-demo animate{display:none}}
+.gesture-drill { position:fixed; bottom:4.5rem; left:1rem; z-index:30; width:min(340px,calc(100vw - 2rem)); max-height:45dvh; overflow:auto; background:#19263b; color:white; padding:12px; border-radius:12px; }
+.gesture-drill button { min-height:44px; margin-right:6px; }
+
+.demo-loop {animation: practice-loop 2.8s linear infinite}
+.demo-diagonal {animation: practice-diagonal 2.8s ease-in-out infinite}
+@keyframes practice-loop {0%,100%{transform:translate(-14px,0)}25%{transform:translate(0,-6px)}50%{transform:translate(14px,0)}75%{transform:translate(0,6px)}}
+@keyframes practice-diagonal {0%,100%{transform:translate(-12px,-5px)}65%{transform:translate(18px,7px)}}
+@media(prefers-reduced-motion:reduce){.demo-loop,.demo-diagonal{animation:none}}

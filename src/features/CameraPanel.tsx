@@ -1,3 +1,5 @@
+import type { Drill } from './HandDemo';
+import { PracticeMotion } from './practiceMotion';
 import { useEffect, useRef, useState } from 'react';
 import { Camera, Download, Hand, LoaderCircle, Pause, Play, Settings2, VideoOff, X } from 'lucide-react';
 import { palmOf, matchPalm, PresenterHands, type HandRole } from '../engine/gestures/presenter';
@@ -16,10 +18,10 @@ import { dwellStep, gestureTarget, initialDwellState } from './gestureUI';
 export type HandInput=EngineEvent;
 function drawingHand(settings:GestureSettings){return settings.swapHands?(settings.dominantHand==='Left'?'Right':'Left'):settings.dominantHand;}
 const labels=['unlabeled','open palm','point','pinch','peace','fist','swipe','two-hand pinch'] as const;
-export default function CameraPanel({onClose,onInput,onStatus,presentation=false,boardContains,tool,sessionKey,locked,onToggleLock,paperArea}:{paperArea:()=>Frame['paper'];locked:boolean;onToggleLock:()=>void;onClose:()=>void;onInput:(event:EngineEvent)=>void;onStatus:(status:string)=>void;presentation?:boolean;boardContains:(x:number,y:number)=>boolean;tool:string;sessionKey:string}){
+export default function CameraPanel({drill,onRecognized,onClose,onInput,onStatus,presentation=false,boardContains,tool,sessionKey,locked,onToggleLock,paperArea}:{drill?:Drill|'done';onRecognized:()=>void;paperArea:()=>Frame['paper'];locked:boolean;onToggleLock:()=>void;onClose:()=>void;onInput:(event:EngineEvent)=>void;onStatus:(status:string)=>void;presentation?:boolean;boardContains:(x:number,y:number)=>boolean;tool:string;sessionKey:string}){
   const video=useRef<HTMLVideoElement>(null),overlay=useRef<HTMLCanvasElement>(null),cursor=useRef<HandCursorHandle>(null);
-  const settings=useSettings(),currentSettings=useRef(settings),callbacks=useRef({onInput,onStatus,boardContains,presentation,tool,sessionKey,locked,onToggleLock,paperArea});
-  currentSettings.current=settings;callbacks.current={onInput,onStatus,boardContains,presentation,tool,sessionKey,locked,onToggleLock,paperArea};
+  const settings=useSettings(),currentSettings=useRef(settings),callbacks=useRef({drill,onRecognized,onInput,onStatus,boardContains,presentation,tool,sessionKey,locked,onToggleLock,paperArea});
+  currentSettings.current=settings;callbacks.current={drill,onRecognized,onInput,onStatus,boardContains,presentation,tool,sessionKey,locked,onToggleLock,paperArea};
   const [calibrationOpen,setCalibrationOpen]=useState(false),calibrationRef=useRef(false),calibrationFeed=useRef<CalibrationFeed|null>(null);calibrationRef.current=calibrationOpen;
   const [folded,setFolded]=useState(false);
   const owner=useRef(new PresenterHands()),selecting=useRef<HandRole|null>('draw');
@@ -70,6 +72,7 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
     reach.current=undefined;owner.current.clear();pairedSide.current=undefined;focusRegion.current=undefined;selecting.current='draw';setSelection('draw');setMarkers([]);setFolded(false);setPreview(true);
     resetInput.current=()=>finish('presenter selection changed');
     cyclePairing.current.reset();
+    let practiceMotion=new PracticeMotion(),lastDrill:Drill|'done'|undefined;
     let lastPage=-Infinity,aspect=0;
     const tracker=new CameraTracker(video.current,(hands,m)=>{
       if(!alive)return;if(key!==callbacks.current.sessionKey){const latch=state.shortcut,swipe=state.pageSwipe;finish('page changed');if(swipe?.fired)state.pageSwipe=swipe;if(latch)state.shortcut={...latch,pose:'missing',last:m.t,since:m.t};key=callbacks.current.sessionKey;}
@@ -106,25 +109,31 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
       const frame:Frame={t:m.t,reach:reach.current,hands:active,pairedRoles:true,paper:callbacks.current.paperArea(),inputMirrored:m.inputMirrored,aspect:m.aspect,fps:m.fps,mobile:/Android|iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1),viewport:{width:window.innerWidth,height:window.innerHeight}},compatible=profileMatches(currentSettings.current.calibration,m.cameraId,m.aspect,pairedSide.current??drawingHand(currentSettings.current)),s:GestureSettings=recordRef.current&&recordSettings.current?recordSettings.current:{...currentSettings.current,calibration:compatible?currentSettings.current.calibration:undefined};activeSettings.current=s;
       if(recordRef.current&&records.current.length<5400)records.current.push({...frame,label:labelRef.current});
       const dialog=!!document.querySelector('dialog[open]');
+      const drill=callbacks.current.drill;
+      if(drill!==lastDrill){finish('practice changed');practiceMotion=new PracticeMotion();lastDrill=drill;}
+      const practicing=!!drill && !pauseRef.current && !dialog && !calibrationRef.current;
       const common:Context={
-        allowDot:callbacks.current.tool==='pen',paused:pauseRef.current||calibrationRef.current,
-        presentation:callbacks.current.presentation,dialog,
+        allowDot:!!drill||callbacks.current.tool==='pen',paused:pauseRef.current||calibrationRef.current,
+        presentation:!drill&&callbacks.current.presentation,dialog,
         shortcuts:{locked:callbacks.current.locked,waitingForPalm:neutralRequired.current,
-          thumbPages:currentSettings.current.thumbPages,editing:!!document.activeElement?.matches('input,textarea,[contenteditable=true]')}
+          thumbPages:!!drill||currentSettings.current.thumbPages,editing:!!document.activeElement?.matches('input,textarea,[contenteditable=true]')}
       };
       const captured=state.mode==='transform';
       let x=0,y=0,target:ReturnType<typeof gestureTarget>;
       const output=step(frame,state,s,common,cursor=>{
         x=cursor.x*window.innerWidth;y=cursor.y*window.innerHeight;
         target=captured||!cursor.inBounds?undefined:gestureTarget(x,y);
+        if(drill && !target?.element.hasAttribute('data-practice-target'))target=undefined;
         if(pauseRef.current && !target?.element.hasAttribute('data-resume'))target=undefined;
-        return {overUI:!!target||dialog,allowInk:captured||(!target&&!dialog&&callbacks.current.boardContains(x,y))};
+        return {overUI:!!target||dialog,allowInk:practicing||captured||(!target&&!dialog&&callbacks.current.boardContains(x,y))};
       });
       calibrationFeed.current?.({t:m.t,ratio:output.state.features?.pinch,wrist:output.state.identity?.wrist,hands:owned.draw?1:0,lowLight:m.lowLight,cameraId:m.cameraId,aspect:m.aspect,mobile:frame.mobile});
       state=output.state;
       if(active[0] && state.features?.gesture==='OPEN_PALM')neutralRequired.current=false;
+      if(practicing && ((drill==='pair'&&owned.draw)||(drill==='second'&&owned.command)||(drill==='aim'&&output.gesture==='POINT'&&output.cursor?.inBounds)||(drill==='laser'&&target&&output.gesture==='POINT')))callbacks.current.onRecognized();
       // End drawing before dispatching a control. A toolbar pinch is never pen-down.
       output.events.forEach(e=>{
+        if(drill){if(practicing && drill!=='done' && practiceMotion.accepts(drill,e,output.gesture==='OPEN_PALM'))callbacks.current.onRecognized();return;}
         if(e.type==='toggle-lock'){callbacks.current.onToggleLock();return;}
         if(e.type==='page'){if(m.t-lastPage<360)return;lastPage=m.t;}
         callbacks.current.onInput(e);
@@ -132,7 +141,8 @@ export default function CameraPanel({onClose,onInput,onStatus,presentation=false
       if(!output.cursor){target=undefined;dwell=initialDwellState();}
       const ui=dwellStep(dwell,{target:target?.element,x,y,t:m.t,pinching:state.pinching,typingKey:!!target?.element.closest('.note-keyboard'),allowDwell:!captured&&(output.gesture==='POINT'||output.gesture==='OPEN_PALM')});
       dwell=ui.state;
-      if(ui.click&&target){callbacks.current.onInput({type:'end',reason:'UI click'});target.element.click();}
+      if(ui.click&&target&&drill){if(practicing&&(drill==="select"||drill==="color"||drill==="text"))callbacks.current.onRecognized();}
+      else if(ui.click&&target){callbacks.current.onInput({type:'end',reason:'UI click'});target.element.click();}
       cursor.current?.update({x,y,visible:!!output.cursor,pinching:state.pinching,radius:currentSettings.current.eraserRadius,eraser:(output.cursor?.eraser??false)||callbacks.current.tool==='eraser',progress:ui.progress,overUI:!!target,laser:(callbacks.current.presentation||callbacks.current.tool==='laser')&&!target,label:target?.element.getAttribute('aria-label')??(output.cursor?.eraser?'Erase':output.gesture==='PINCH'?'Pinch':'')});
       const ctx=overlay.current?.offsetHeight?overlay.current.getContext('2d'):null;if(ctx){ctx.clearRect(0,0,320,240);hands.forEach(h=>{ctx.fillStyle=active.includes(h)?'#66ddc1':'#9aaac3';h.landmarks.forEach(p=>{ctx.beginPath();ctx.arc((s.mirror?1-p.x:p.x)*320,p.y*240,2,0,7);ctx.fill();});});}
       if(m.t-lastUI>160){

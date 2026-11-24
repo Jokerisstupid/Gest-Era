@@ -42,3 +42,32 @@ describe('asynchronous capture and cleanup',()=>{
 describe('new real recordings — unlabeled regression, no accuracy claims',()=>{
   for(let i=0;i<3;i++)it(`replays session ${i} with finite cursors and no single-hand undo/redo/swipe`,{skip:!fs.existsSync(new URL(`./fixtures/session-v03-${i}.json`,import.meta.url))},()=>{const recording=JSON.parse(fs.readFileSync(new URL(`./fixtures/session-v03-${i}.json`,import.meta.url),'utf8'));let state=initialEngineState();for(const f of recording.frames){const r=step(f,state,{...defaultGestureSettings,...recording.metadata.settings});state=r.state;if(r.cursor)assert.ok(Number.isFinite(r.cursor.x)&&Number.isFinite(r.cursor.y));if(f.hands.length<2)assert.ok(!r.events.some(e=>['undo','redo','page'].includes(e.type)));}assert.ok(recording.frames.every((f:{label:string})=>f.label==='unlabeled'));});
 });
+
+import { PracticeMotion } from '../src/features/practiceMotion';
+describe('guided gesture rehearsal',()=>{
+  const p=(x:number,y:number)=>({x,y,t:100});
+  it('requires pen travel, two-axis shape sizing and a closed lasso',()=>{
+    for(const id of ['write','highlight','move','handPan','shape','lasso'] as const){
+      const motion=new PracticeMotion();
+      motion.accepts(id,{type:'begin',point:p(.4,.4),points:[],erase:false},false);
+      assert.equal(motion.accepts(id,{type:'point',point:p(.4,.4),erase:false},false),false);
+      assert.equal(motion.accepts(id,{type:'point',point:p(.5,.4),erase:false},false),!['shape','lasso'].includes(id));
+      assert.equal(motion.accepts(id,{type:'point',point:p(.5,.5),erase:false},false),id!=='lasso');
+      motion.accepts(id,{type:'point',point:p(.4,.4),erase:false},false);
+      assert.equal(motion.accepts(id,{type:'end',reason:'pinch released'},false),id==='lasso');
+    }
+  });
+  it('distinguishes thumb shortcuts from palm sweeps and rejects a lost-hand dot',()=>{
+    for(const direction of [-1,1] as const){
+      const motion=new PracticeMotion(),page={type:'page' as const,direction};
+      assert.ok(motion.accepts(direction===1?'right':'left',page,true));
+      assert.equal(motion.accepts(direction===1?'right':'left',page,false),false);
+      assert.ok(motion.accepts(direction===1?'thumbRight':'thumbLeft',page,false));
+    }
+    const m=new PracticeMotion();
+    for(const reason of ['hand lost','short pinch dot']){
+      m.accepts('dot',{type:'begin',point:p(.5,.5),points:[],erase:false},false);
+      assert.equal(m.accepts('dot',{type:'end',reason},false),reason==='short pinch dot');
+    }
+  });
+});

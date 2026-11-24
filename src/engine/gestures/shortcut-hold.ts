@@ -42,7 +42,8 @@ export function pageSwipeStep(previous:PageSwipe|undefined,hand:Hand,t:number,as
     const rest=still?anchor:{x,y,t};
     const origin=previous.origin;
     const returned=origin && Math.hypot(x-origin.x,y-origin.y)<.035;
-    if(!returned||t-rest.t<230)return {state:{samples:[{x,y,t}],rest,origin,fired:true}};
+    // A deliberate pause at either end arms the reverse sweep. A quick return stays latched.
+    if(t-rest.t<(returned?230:850))return {state:{samples:[{x,y,t}],rest,origin,fired:true}};
     return {state:{samples:[{x,y,t}],fired:false}};
   }
   const samples=(previous?.samples??[]).filter(p=>t-p.t<=900);

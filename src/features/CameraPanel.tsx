@@ -144,7 +144,7 @@ export default function CameraPanel({drill,onRecognized,onClose,onInput,onStatus
       if(ui.click&&target&&drill){if(practicing&&(drill==="select"||drill==="color"||drill==="text"))callbacks.current.onRecognized();}
       else if(ui.click&&target){callbacks.current.onInput({type:'end',reason:'UI click'});target.element.click();}
       cursor.current?.update({x,y,visible:!!output.cursor,pinching:state.pinching,radius:currentSettings.current.eraserRadius,eraser:(output.cursor?.eraser??false)||callbacks.current.tool==='eraser',progress:ui.progress,overUI:!!target,laser:(callbacks.current.presentation||callbacks.current.tool==='laser')&&!target,label:target?.element.getAttribute('aria-label')??(output.cursor?.eraser?'Erase':output.gesture==='PINCH'?'Pinch':'')});
-      const ctx=overlay.current?.offsetHeight?overlay.current.getContext('2d'):null;if(ctx){ctx.clearRect(0,0,320,240);hands.forEach(h=>{ctx.fillStyle=active.includes(h)?'#66ddc1':'#9aaac3';h.landmarks.forEach(p=>{ctx.beginPath();ctx.arc((s.mirror?1-p.x:p.x)*320,p.y*240,2,0,7);ctx.fill();});});}
+      const ctx=overlay.current?.offsetHeight?overlay.current.getContext('2d'):null;if(ctx){ctx.clearRect(0,0,320,240);hands.forEach(h=>{ctx.fillStyle=active.includes(h)?'#66ddc1':'#9aaac3';ctx.beginPath();for(const p of h.landmarks){const x=(s.mirror?1-p.x:p.x)*320,y=p.y*240;ctx.moveTo(x+2,y);ctx.arc(x,y,2,0,Math.PI*2);}ctx.fill();});}
       if(m.t-lastUI>160){
         if(selecting.current)setMarkers(hands.filter(h=>selecting.current==='draw'||h!==owned.draw).flatMap(h=>palmOf(h,m.aspect,m.t)??[]));
         setMetrics({...m,hands:hands.length,gesture:output.gesture,activeHand:output.activeHand,state:state.mode.toUpperCase(),compatible});

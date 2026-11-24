@@ -1,10 +1,27 @@
 import type { CameraRegion } from './gesture-crop';
 
+// Search the center first, then all four corners. Full-frame observations run between tiles.
+const searchTiles = [[.18,.18],[0,0],[.36,.36],[.36,0],[0,.36]] as const;
+
+export class CameraBudget {
+  private average=0;
+  private changedAt=-Infinity;
+  compact=false;
+  observe(ms:number,t:number){
+    if(!Number.isFinite(ms)||ms<=0)return;
+    this.average=this.average?this.average*.85+Math.min(ms,250)*.15:Math.min(ms,250);
+    if(t-this.changedAt<1800)return;
+    const compact=this.compact?this.average>=36:this.average>56;
+    if(compact!==this.compact){this.compact=compact;this.changedAt=t;}
+  }
+}
+
 export function cameraInputPlan(region:CameraRegion|undefined,misses:number,slow:boolean,scanDetail=false,fixed=false){
   // Alternate detail and full context without adding a second inference to a frame.
   const phase=misses%4;
   const seek=scanDetail&&misses>=2&&phase%2===1;
-  const detail=region??(seek?{x:[.18,.02,.34][Math.floor(misses/4)%3],y:.14,size:.64}:undefined);
+  const tile=searchTiles[Math.floor(Math.max(0,misses-3)/2)%searchTiles.length];
+  const detail=region??(seek?{x:tile[0],y:tile[1],size:.64}:undefined);
   const useFull=!fixed&&(phase===2||(phase===0&&misses>0));
   return {
     region:useFull?undefined:detail,

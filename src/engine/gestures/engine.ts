@@ -68,7 +68,7 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
     return {state,events,gesture:'NONE',status:'Finding your paired hand',activeHand:'None',commandReady:false};
   }
   if(!hand){end('hand lost',true);reset();state.armed=previous.armed&&!previous.pinching;return{state,events,gesture:'NONE',status:selection.ambiguous?'Hands overlap — separate them':'Hand lost — bring it into view',activeHand:'None',commandReady:false};}
-  if(state.identity&&frame.t-state.identity.t<150&&Math.hypot(hand.landmarks[0].x-state.identity.wrist.x,hand.landmarks[0].y-state.identity.wrist.y)>.22){end('tracking position jumped',true);reset();state.armed=false;}
+  if(state.identity&&frame.t-state.identity.t<150&&Math.hypot(hand.landmarks[0].x-state.identity.wrist.x,(hand.landmarks[0].y-state.identity.wrist.y)*(frame.aspect??1))>.22){end('tracking position jumped',true);reset();state.armed=false;}
   const previousIdentity=state.identity;
   state.identity=selection.identity;
   const features=extractFeatures(hand,discontinuity?undefined:state.features,frame.aspect??1);
@@ -138,7 +138,7 @@ export function step(frame:Frame,previous:EngineState,settings:GestureSettings,c
   const x=mapX(settings.mirror?1-anchor.x:anchor.x),y=mapY(anchor.y);
   if(state.heldThroughLoss && previousIdentity) {
     const wrist=hand.landmarks[0], tip=hand.landmarks[8];
-    const moved=Math.hypot(wrist.x-previousIdentity.wrist.x,wrist.y-previousIdentity.wrist.y);
+    const moved=Math.hypot(wrist.x-previousIdentity.wrist.x,(wrist.y-previousIdentity.wrist.y)*(frame.aspect??1));
     const jumped=previous.tracking && Math.hypot(tip.x-previous.tracking.tips[0].x,tip.y*(frame.aspect??1)-previous.tracking.tips[0].y)>.11;
     if(frame.t-previousIdentity.t>lossGrace || moved>.07 || jumped || ratio>=limits.exit || features.gesture==='FIST') {
       end('hand returned in a different position or pose',true);

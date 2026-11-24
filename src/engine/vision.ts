@@ -4,7 +4,7 @@ import { fullFrameHand, type CameraRegion } from './gesture-crop';
 import { FrameGate } from './frameGate';
 import { acquireCamera } from './camera-request';
 import { watchCameraFrames } from './camera-frames';
-import { cameraInputPlan,inputSize,liftCameraShadows,meterHandLight } from './camera-input';
+import { CameraBudget,cameraInputPlan,inputSize,liftCameraShadows,meterHandLight } from './camera-input';
 
 export type TrackedHand=Hand;
 export interface CaptureMetrics {
@@ -111,7 +111,8 @@ export class CameraTracker {
     sample.height=12;
     const ctx=sample.getContext('2d',{willReadFrequently:true});
     const cameraId=track.getSettings?.().deviceId??'default';
-    let lastFrame=performance.now(), lastLight=-Infinity, lowLight=false,glare=false,misses=0,processingMs=0,lastAspect=0;
+    const budget=new CameraBudget();
+    let lastFrame=performance.now(), lastLight=-Infinity, lowLight=false,glare=false,misses=0,lastAspect=0;
 
     let lightCurve:Uint8ClampedArray|undefined, holdLightingUntil=0;
     const fingerprint=mobileCapture && ctx?()=>{
@@ -131,7 +132,7 @@ export class CameraTracker {
       const width=this.video.videoWidth,height=this.video.videoHeight;
       if(!width||!height)return;
       const aspect=height/width;
-      if(lastAspect && Math.abs(aspect-lastAspect)>.035){this.region=undefined;misses=0;}
+      if(lastAspect && Math.abs(aspect-lastAspect)>.035){this.region=undefined;this.meterRegion=undefined;lightCurve=undefined;lastLight=-Infinity;misses=0;}
       lastAspect=aspect;
       void this.gate.run(async ()=>{
         if(t-lastLight>(misses?200:350) && ctx) {
@@ -151,7 +152,7 @@ export class CameraTracker {
         }
         const backend=this.backend!;
         const start=performance.now();
-        const plan=cameraInputPlan(this.region,misses,processingMs>52,this.scanDetail,this.fixedRegion);
+        const plan=cameraInputPlan(this.region,misses,budget.compact,this.scanDetail,this.fixedRegion);
         const region=cropContext?plan.region:undefined;
         const enhance=lightCurve?misses%4!==2:plan.enhance&&misses>=3;
         let input:HTMLVideoElement|HTMLCanvasElement=this.video;
@@ -173,7 +174,7 @@ export class CameraTracker {
         if(region)result.hands=result.hands.map(hand=>fullFrameHand(hand,region));
         return {...result,backend:backend.mode,pipeline:performance.now()-start};
       },result=>{
-        processingMs=processingMs*.85+result.pipeline*.15;
+        budget.observe(result.pipeline,t);
         this.onFrame(result.hands,{t,fps:frameRate(processed,t),captureFPS,inference:result.inference,
           pipeline:result.pipeline,backend:result.backend,lowLight,glare,width,height,aspect,inputMirrored:false,cameraId});
         misses=this.trackingMissing||!result.hands.length?misses+1:0;

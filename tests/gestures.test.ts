@@ -497,3 +497,24 @@ it('keeps ownership when one nearby frame temporarily mislabels the presenter',(
   const recovered=syntheticHand('open',undefined,.08);
   assert.equal(owner.follow([recovered],1,180).draw,recovered);
 });
+
+import { CameraBudget } from '../src/engine/camera-input';
+describe('camera workload and field of view',()=>{
+  it('reaches all four frame corners while retaining full-frame scans',()=>{
+    const scans=Array.from({length:10},(_,i)=>cameraInputPlan(undefined,i+3,false,true).region);
+    for(const [x,y] of [[0,0],[1,0],[0,1],[1,1]]){
+      assert.ok(scans.some(r=>r && r.x<=x && r.x+r.size>=x && r.y<=y && r.y+r.size>=y));
+    }
+    assert.equal(scans.filter(r=>!r).length,5);
+  });
+  it('keeps a steady inference budget around the threshold and recovers after sustained headroom',()=>{
+    const budget=new CameraBudget();
+    budget.observe(75,0);
+    for(let i=1;i<=30;i++)budget.observe(45,i*100);
+    assert.ok(budget.compact);
+    for(let i=31;i<=60;i++)budget.observe(23,i*100);
+    assert.equal(budget.compact,false);
+    budget.observe(75,6100);
+    assert.equal(budget.compact,false);
+  });
+});
